@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantum-analyzer"
+version = "0.1.0"
+description = "Research-first quantum analyzer core for backtest and live advisory."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "polars>=1.0.0",
+  "pandas>=2.0.0",
+  "numpy>=1.26.0",
+  "pyarrow>=16.0.0",
+  "duckdb>=1.0.0",
+  "scikit-learn>=1.5.0",
+  "scipy>=1.13.0",
+  "pytest>=8.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["quantum_analyzer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
