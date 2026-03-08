@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from quantum_analyzer.contracts import ActionProposal, ForecastBundle
 from .execution import apply_turnover_cap
@@ -46,7 +45,7 @@ def propose_action(inp: PolicyInputs) -> ActionProposal:
     # hard no-trade gates
     if entropy > inp.entropy_threshold:
         return ActionProposal(
-            ts=datetime.now(timezone.utc),
+            ts=f.ts,
             symbol=f.symbol,
             action="HOLD",
             score=0.0,
@@ -58,7 +57,7 @@ def propose_action(inp: PolicyInputs) -> ActionProposal:
         )
     if calib < inp.calibration_threshold:
         return ActionProposal(
-            ts=datetime.now(timezone.utc),
+            ts=f.ts,
             symbol=f.symbol,
             action="HOLD",
             score=0.0,
@@ -71,7 +70,7 @@ def propose_action(inp: PolicyInputs) -> ActionProposal:
 
     if in_no_trade_region(exp_edge_bps, exp_cost_bps, PolicyConfig().no_trade_band_bps):
         return ActionProposal(
-            ts=datetime.now(timezone.utc),
+            ts=f.ts,
             symbol=f.symbol,
             action="HOLD",
             score=0.0,
@@ -107,7 +106,7 @@ def propose_action(inp: PolicyInputs) -> ActionProposal:
     size_fraction = abs(capped_target - inp.current_position)
 
     return ActionProposal(
-        ts=datetime.now(timezone.utc),
+        ts=f.ts,
         symbol=f.symbol,
         action=action,
         score=float(score),
@@ -116,11 +115,16 @@ def propose_action(inp: PolicyInputs) -> ActionProposal:
         expected_edge_bps=float(exp_edge_bps),
         expected_cost_bps=float(exp_cost_bps),
         reason=reason,
+        advisory_mode="spot_only",
+        target_scope="advisory_sleeve",
         controls={
             "entropy": entropy,
             "calibration_score": calib,
             "turnover_cap": inp.turnover_cap,
             "abs_cap": abs_cap,
             "current_position": inp.current_position,
+            "generic_target_position": float(capped_target),
+            "spot_implementable_target_position": float(max(0.0, capped_target)),
+            "spot_unsupported_negative_target": bool(capped_target < 0.0),
         },
     )

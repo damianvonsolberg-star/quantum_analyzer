@@ -8,6 +8,8 @@ from typing import Any
 import pandas as pd
 import requests
 
+from quantum_analyzer.monitoring.governance import DriftThresholds, evaluate_governance
+from ui.contracts import ARTIFACT_SCHEMA_V2, REQUIRED_BUNDLE_SECTIONS_V2
 from ui.view_models import (
     UiBacktestSummary,
     UiDriftStatus,
@@ -100,6 +102,21 @@ class ArtifactAdapter:
         scan(raw.get("summary"))
         return sorted(vals)
 
+    def _bundle_v2(self) -> dict[str, Any] | None:
+        b = self.load_raw().get("bundle")
+        if not isinstance(b, dict):
+            return None
+        if b.get("schema_version") != ARTIFACT_SCHEMA_V2:
+            return None
+        missing = [k for k in REQUIRED_BUNDLE_SECTIONS_V2 if k not in b]
+        if missing:
+            raise AdapterValidationError(f"schema v2 bundle missing required sections: {', '.join(missing)}")
+        return b
+
+    def _bundle_legacy(self) -> dict[str, Any] | None:
+        b = self.load_raw().get("bundle")
+        return b if isinstance(b, dict) else None
+
     @staticmethod
     def _extract_horizons(bundle: dict[str, Any] | None) -> list[str]:
         if not isinstance(bundle, dict):
@@ -137,7 +154,21 @@ class ArtifactAdapter:
         return default
 
     def to_forecast_view(self) -> UiForecastView:
-        bundle = self.load_raw().get("bundle")
+        bundle_v2 = self._bundle_v2()
+        if bundle_v2 is not None:
+            forecast = bundle_v2["forecast"]
+            entropy = forecast.get("entropy") if isinstance(forecast.get("entropy"), (float, int)) else None
+            confidence = forecast.get("confidence") if isinstance(forecast.get("confidence"), (float, int)) else None
+            calib = forecast.get("calibration_score") if isinstance(forecast.get("calibration_score"), (float, int)) else None
+            return UiForecastView(
+                horizons=self._extract_horizons({"forecast": forecast}),
+                entropy=float(entropy) if entropy is not None else None,
+                confidence=float(confidence) if confidence is not None else None,
+                calibration_score=float(calib) if calib is not None else None,
+                raw=forecast,
+            )
+
+        bundle = self._bundle_legacy()
         if not isinstance(bundle, dict):
             return UiForecastView()
         forecast = bundle.get("forecast", {}) if isinstance(bundle.get("forecast"), dict) else {}
@@ -147,10 +178,55 @@ class ArtifactAdapter:
             horizons=self._extract_horizons(bundle),
             entropy=float(entropy) if entropy is not None else None,
             confidence=float(confidence) if confidence is not None else None,
+            calibration_score=None,
             raw=forecast if isinstance(forecast, dict) else {},
         )
 
     def to_live_advice(self) -> UiLiveAdvice:
+        bundle_v2 = self._bundle_v2()
+        if bundle_v2 is not None:
+            p = bundle_v2["proposal"]
+            f = bundle_v2["forecast"]
+            required = ["timestamp", "action", "target_position", "expected_edge_bps", "expected_cost_bps"]
+            missing = [k for k in required if k not in p]
+            if missing:
+                raise AdapterValidationError(f"schema v2 proposal missing required fields: {', '.join(missing)}")
+
+            timestamp = str(p.get("timestamp") or "")
+            if not timestamp:
+                raise AdapterValidationError("schema v2 proposal timestamp is empty")
+            headline_action = str(p["action"])
+            target_position = float(p["target_position"])
+            edge = float(p["expected_edge_bps"])
+            cost = float(p["expected_cost_bps"])
+            confidence = float(f["confidence"]) if isinstance(f.get("confidence"), (float, int)) else None
+            entropy = float(f["entropy"]) if isinstance(f.get("entropy"), (float, int)) else None
+            reason = str(p.get("reason") or "")
+            reasons = p.get("reasons") if isinstance(p.get("reasons"), list) else ([reason] if reason else [])
+
+            if edge > cost and abs(target_position) > 0:
+                traffic = "green"
+            elif edge > cost * 0.8:
+                traffic = "yellow"
+            else:
+                traffic = "red"
+
+            return UiLiveAdvice(
+                timestamp=timestamp,
+                headline_action=headline_action,
+                traffic_light=traffic,
+                target_position=target_position,
+                expected_edge_bps=edge,
+                expected_cost_bps=cost,
+                confidence=confidence,
+                entropy=entropy,
+                risk_note=reason,
+                reasons=reasons,
+                advisory_mode=str(p.get("advisory_mode", "spot_only")),
+                target_scope=str(p.get("target_scope", "advisory_sleeve")),
+            )
+
+        # legacy fallback path
         raw = self.load_raw()
         actions = raw.get("actions")
         if not isinstance(actions, pd.DataFrame) or actions.empty:
@@ -197,12 +273,18 @@ class ArtifactAdapter:
             entropy=entropy,
             risk_note=reason,
             reasons=reasons,
+            advisory_mode="spot_only",
+            target_scope="advisory_sleeve",
         )
 
     def to_backtest_summary(self) -> UiBacktestSummary:
-        summary = self.load_raw().get("summary")
-        if not isinstance(summary, dict):
-            raise AdapterValidationError("summary.json missing or invalid")
+        bundle_v2 = self._bundle_v2()
+        if bundle_v2 is not None:
+            summary = bundle_v2["summary"]
+        else:
+            summary = self.load_raw().get("summary")
+            if not isinstance(summary, dict):
+                raise AdapterValidationError("summary.json missing or invalid")
 
         diag = summary.get("diagnostics", {}) if isinstance(summary.get("diagnostics"), dict) else {}
         return UiBacktestSummary(
@@ -211,7 +293,7 @@ class ArtifactAdapter:
             ending_equity=float(summary["ending_equity"]) if "ending_equity" in summary else None,
             return_pct=float(summary["return_pct"]) if "return_pct" in summary else None,
             max_drawdown=float(diag["max_drawdown"]) if "max_drawdown" in diag else None,
-            schema_version=summary.get("schema_version"),
+            schema_version=(bundle_v2.get("schema_version") if bundle_v2 else summary.get("schema_version")),
             raw=summary,
         )
 
@@ -234,16 +316,45 @@ class ArtifactAdapter:
         return out
 
     def to_drift_status(self) -> UiDriftStatus:
-        doctor = self.load_raw().get("doctor")
-        if not isinstance(doctor, dict):
-            return UiDriftStatus(ok=True, warnings=["doctor_report.json missing"], schema_versions=self.schema_versions())
+        raw = self.load_raw()
+        bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
+        doctor = raw.get("doctor") if isinstance(raw.get("doctor"), dict) else {}
+
+        # canonical governance payload path
+        drift_obj = bundle.get("drift") if isinstance(bundle.get("drift"), dict) else {}
+        governance = drift_obj.get("governance") if isinstance(drift_obj.get("governance"), dict) else None
+
+        if governance is None and all(k in drift_obj for k in ["overall_status", "kill_switch_active", "kill_switch_reasons"]):
+            governance = drift_obj
+
+        if governance is None:
+            # derive canonical governance from available metrics/doctor (single shared evaluator)
+            m = drift_obj.get("metrics") if isinstance(drift_obj.get("metrics"), dict) else drift_obj
+            g = evaluate_governance(
+                bad_data=not bool(doctor.get("ok", True)),
+                feature_psi_max=float(m.get("feature_drift", 0.0) or 0.0),
+                state_drift=float(m.get("state_occupancy_drift", 0.0) or 0.0),
+                action_rate_drift=float(m.get("action_rate_drift", 0.0) or 0.0),
+                cost_drift_bps=float(m.get("cost_drift_bps", 0.0) or 0.0),
+                calibration_drift=float(m.get("calibration_drift", 0.0) or 0.0),
+                artifact_timestamp=(doctor.get("latest_timestamp") or (bundle.get("artifact_meta", {}) or {}).get("latest_timestamp") if isinstance(bundle.get("artifact_meta"), dict) else None),
+                data_timestamp=(drift_obj.get("latest_live_timestamp") if isinstance(drift_obj, dict) else None),
+                th=DriftThresholds(),
+            )
+            governance = g.to_dict()
+
+        status = str(governance.get("overall_status", "OK")).upper()
+        reasons = governance.get("kill_switch_reasons", []) if isinstance(governance.get("kill_switch_reasons"), list) else []
+
         return UiDriftStatus(
-            ok=bool(doctor.get("ok", True)),
-            warnings=doctor.get("warnings", []) or [],
-            hard_failures=doctor.get("hard_failures", []) or [],
-            latest_timestamp=doctor.get("latest_timestamp"),
-            schema_versions=doctor.get("schema_versions", []) or self.schema_versions(),
-            raw=doctor,
+            ok=(status == "OK" and not bool(governance.get("kill_switch_active", False))),
+            warnings=[] if status == "OK" else [f"governance_status={status}"],
+            hard_failures=reasons,
+            latest_timestamp=(bundle.get("artifact_meta", {}) or {}).get("latest_timestamp") if isinstance(bundle.get("artifact_meta"), dict) else doctor.get("latest_timestamp"),
+            schema_versions=self.schema_versions(),
+            governance_status=status,
+            governance_payload=governance,
+            raw={"governance": governance},
         )
 
 

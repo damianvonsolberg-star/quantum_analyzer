@@ -36,8 +36,8 @@ def _base_portfolio(weight=0.2):
     )
 
 
-def _base_drift(ok=True, hard_failures=None):
-    return UiDriftStatus(ok=ok, hard_failures=hard_failures or [], warnings=[])
+def _base_drift(ok=True, hard_failures=None, governance_status=None):
+    return UiDriftStatus(ok=ok, hard_failures=hard_failures or [], warnings=[], governance_status=governance_status)
 
 
 def test_halt_on_drift_failure():
@@ -45,14 +45,19 @@ def test_halt_on_drift_failure():
     assert rec.light == "HALT"
 
 
-def test_watch_on_stale_artifact():
+def test_stale_artifact_status_consistency():
     old_ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
-    rec = decide_recommendation(_base_advice(timestamp=old_ts), _base_portfolio(), _base_drift())
+    rec = decide_recommendation(_base_advice(timestamp=old_ts), _base_portfolio(), _base_drift(governance_status="WATCH"))
+    assert rec.light == "WATCH"
+
+
+def test_live_and_drift_status_consistency():
+    rec = decide_recommendation(_base_advice(target_position=0.7, confidence=0.8, entropy=0.3), _base_portfolio(weight=0.2), _base_drift(governance_status="WATCH"))
     assert rec.light == "WATCH"
 
 
 def test_green_when_target_above_current_and_quality_good():
-    rec = decide_recommendation(_base_advice(target_position=0.7, confidence=0.8, entropy=0.3), _base_portfolio(weight=0.2), _base_drift())
+    rec = decide_recommendation(_base_advice(target_position=0.7, confidence=0.8, entropy=0.3), _base_portfolio(weight=0.2), _base_drift(governance_status="OK"))
     assert rec.light == "GREEN"
     assert rec.action_text == "BUY"
 
@@ -65,3 +70,9 @@ def test_red_when_target_below_current():
 def test_yellow_when_uncertain_or_small_delta():
     rec = decide_recommendation(_base_advice(target_position=0.22, confidence=0.52, entropy=0.8), _base_portfolio(weight=0.2), _base_drift())
     assert rec.light == "YELLOW"
+
+
+def test_live_advice_labels_wallet_vs_sleeve_semantics():
+    advice = _base_advice()
+    assert advice.advisory_mode == "spot_only"
+    assert advice.target_scope == "advisory_sleeve"

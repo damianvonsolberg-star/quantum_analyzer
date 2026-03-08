@@ -3,6 +3,17 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+ARTIFACT_SCHEMA_V2 = "2.0.0"
+REQUIRED_BUNDLE_SECTIONS_V2 = [
+    "schema_version",
+    "artifact_meta",
+    "forecast",
+    "proposal",
+    "drift",
+    "summary",
+    "config",
+]
+
 
 @dataclass
 class ArtifactCheck:

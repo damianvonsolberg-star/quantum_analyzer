@@ -61,9 +61,11 @@ def _sample_templates() -> list[PathTemplate]:
 
 
 def test_forecast_bundle_generation_contracts(tmp_path: Path) -> None:
-    bundle = build_forecast_bundle("SOLUSDT", _sample_belief(), _sample_templates(), calibration_score=0.77)
+    belief = _sample_belief()
+    bundle = build_forecast_bundle("SOLUSDT", belief, _sample_templates(), calibration_score=0.77)
 
     assert bundle.symbol == "SOLUSDT"
+    assert bundle.ts == belief.ts
     assert "h12" in bundle.distributions and "h36" in bundle.distributions and "h72" in bundle.distributions
 
     d = bundle.to_dict()

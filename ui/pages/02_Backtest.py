@@ -26,9 +26,18 @@ artifact_banner()
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])
 raw = adapter.load_raw()
 summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
+bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
 equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else pd.DataFrame()
 actions = raw.get("actions") if isinstance(raw.get("actions"), pd.DataFrame) else pd.DataFrame()
 templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFrame) else pd.DataFrame()
+
+artifact_ts = None
+if isinstance(bundle.get("artifact_meta"), dict):
+    artifact_ts = bundle.get("artifact_meta", {}).get("latest_timestamp") or bundle.get("artifact_meta", {}).get("produced_at")
+if artifact_ts:
+    st.caption(f"🕒 Artifact timestamp: {artifact_ts}")
+else:
+    st.caption("🕒 Artifact timestamp: not available")
 
 # filters
 f1, f2, f3, f4 = st.columns(4)

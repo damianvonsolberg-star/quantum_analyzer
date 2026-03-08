@@ -52,29 +52,37 @@ def decide_recommendation(
         or advice.entropy is None
     )
 
-    if (not drift.ok) or drift.hard_failures or required_invalid:
+    status = (drift.governance_status or ("OK" if drift.ok else "HALT")).upper()
+
+    if status == "HALT" or required_invalid:
         risks = list(drift.hard_failures[:3])
         if required_invalid:
             risks.append("Missing required advice fields")
+        change_hint = "Fix kill-switch reason(s): " + (", ".join(risks[:2]) if risks else "validate artifacts and drift payload")
         return RecommendationView(
             light="HALT",
             action_text="HALT",
             tail_risk_note=advice.risk_note or "Risk controls active.",
             top_reasons=advice.reasons[:3],
             top_risks=risks[:3],
-            what_changes_light="Refresh artifacts/live data and clear kill-switch or drift failures.",
+            what_changes_light=change_hint,
             stale=stale,
         )
 
-    if stale:
+    if status == "WATCH":
+        watch_risks = (drift.hard_failures[:3] if drift.hard_failures else ["Use reduced trust", "Await fresher diagnostics", "Avoid aggressive sizing"])
+        if stale:
+            change_hint = "Load fresh artifacts and refresh wallet/price to move from WATCH to OK."
+        else:
+            change_hint = "Reduce drift metrics below watch thresholds and keep data/artifacts fresh."
         return RecommendationView(
             light="WATCH",
             action_text="HOLD / WAIT",
-            tail_risk_note=advice.risk_note or "Artifacts are stale.",
-            top_reasons=advice.reasons[:3] or ["Artifact timestamp is old"],
-            top_risks=["Artifacts are stale", "Signal may lag current market", "Use reduced trust"],
-            what_changes_light="Load fresh artifacts / rerun latest advisory export.",
-            stale=True,
+            tail_risk_note=advice.risk_note or "Governance is in WATCH mode.",
+            top_reasons=advice.reasons[:3] or ["Governance watch"],
+            top_risks=watch_risks,
+            what_changes_light=change_hint,
+            stale=stale,
         )
 
     current_w = float(portfolio.current_sol_weight) if portfolio and portfolio.current_sol_weight is not None else 0.0

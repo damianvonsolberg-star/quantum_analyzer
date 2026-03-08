@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Iterable
 
 import math
@@ -99,7 +98,7 @@ def build_forecast_bundle(
         )
 
     return ForecastBundle(
-        ts=datetime.now(timezone.utc),
+        ts=belief.ts,
         symbol=symbol,
         distributions=distributions,
         diagnostics={

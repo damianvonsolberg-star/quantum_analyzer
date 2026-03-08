@@ -97,11 +97,58 @@ def test_build_feature_frame_contracts() -> None:
         "oi_zscore",
         "sol_btc_rel_strength",
         "btc_regime_score",
+        "coverage_agg_trades",
+        "coverage_book_ticker",
+        "coverage_open_interest",
+        "coverage_basis",
+        "historical_liquidity_ok",
+        "historical_derivatives_ok",
         "source_ts_ms",
         "effective_ts_ms",
+        "source_ts_sol_ms",
+        "source_ts_btc_ms",
+        "source_ts_agg_ms",
+        "source_ts_book_ms",
+        "source_ts_funding_ms",
+        "source_ts_oi_ms",
+        "source_ts_basis_ms",
     }
     missing = required.difference(feats.columns)
     assert not missing, f"Missing features: {missing}"
 
-    # timestamp alignment and no lookahead timestamp leakage field-level contract
-    assert (feats["effective_ts_ms"] == feats["source_ts_ms"]).all()
+    # timestamp provenance/no-lookahead expectations
+    assert (feats["effective_ts_ms"] <= feats["source_ts_ms"]).all()
+    assert feats["source_ts_ms"].is_monotonic_increasing
+    assert feats["effective_ts_ms"].is_monotonic_increasing
+
+
+def test_feature_builder_disables_microstructure_features_when_coverage_missing() -> None:
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    n = 24 * 5
+
+    sol = _mk_klines(start, n, 80.0)
+    btc = _mk_klines(start, n, 100000.0)
+
+    agg = pd.DataFrame(
+        {
+            "trade_time_ms": [int(start.timestamp() * 1000)],
+            "qty": [5.0],
+            "price": [80.0],
+            "is_buyer_maker": [False],
+        }
+    )
+    # one-off snapshots only (insufficient historical coverage)
+    one_ts = int(start.timestamp() * 1000)
+    book = pd.DataFrame({"source_ts_ms": [one_ts], "bid_price": [79.9], "ask_price": [80.1], "bid_qty": [10.0], "ask_qty": [9.0]})
+    funding = pd.DataFrame({"source_ts_ms": [one_ts], "funding_rate": [0.0001]})
+    basis = pd.DataFrame({"source_ts_ms": [one_ts], "basis_bps": [5.0]})
+    oi = pd.DataFrame({"source_ts_ms": [one_ts], "open_interest": [1000.0]})
+
+    feats = build_feature_frame(sol, btc, agg, book, funding, basis, oi)
+
+    assert feats["coverage_book_ticker"].iloc[0] < 0.7
+    assert feats["coverage_open_interest"].iloc[0] < 0.7
+    assert feats["coverage_basis"].iloc[0] < 0.7
+    assert feats["orderbook_imbalance"].isna().all()
+    assert feats["oi_zscore"].isna().all()
+    assert feats["basis_bps"].isna().all()

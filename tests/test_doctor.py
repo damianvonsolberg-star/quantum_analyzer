@@ -7,6 +7,8 @@ import sys
 
 import pandas as pd
 
+from ui.contracts import ARTIFACT_SCHEMA_V2
+
 
 def _seed_artifacts(root: Path, include_optional: bool = True) -> None:
     root.mkdir(parents=True, exist_ok=True)
@@ -14,9 +16,31 @@ def _seed_artifacts(root: Path, include_optional: bool = True) -> None:
     (root / "artifact_bundle.json").write_text(
         json.dumps(
             {
+                "schema_version": ARTIFACT_SCHEMA_V2,
+                "artifact_meta": {"producer": "test", "produced_at": "2026-03-01T00:00:00Z", "latest_timestamp": "2026-03-01T00:00:00Z"},
+                "forecast": {
+                    "confidence": 0.6,
+                    "entropy": 0.4,
+                    "calibration_score": 0.8,
+                    "timestamps": {"as_of": "2026-03-01T00:00:00Z"},
+                    "distributions": {"h12": {}, "h36": {}, "h72": {}},
+                },
+                "proposal": {
+                    "timestamp": "2026-03-01T00:00:00Z",
+                    "action": "HOLD",
+                    "target_position": 0.0,
+                    "expected_edge_bps": 5.0,
+                    "expected_cost_bps": 10.0,
+                },
+                "drift": {"governance_status": "OK", "kill_switch": False, "kill_switch_reasons": []},
                 "summary": {"ok": True},
-                "forecast": {"distributions": {"h12": {}, "h36": {}, "h72": {}}},
-                "schema_version": "1.0.0",
+                "config": {},
+                "coverage": {
+                    "agg_trades": 0.95,
+                    "book_ticker": 0.95,
+                    "open_interest": 0.95,
+                    "basis": 0.95,
+                },
             }
         )
     )
@@ -99,3 +123,39 @@ def test_doctor_fails_on_missing_required(tmp_path: Path) -> None:
     assert proc.returncode != 0
     data = json.loads((art / "doctor_report.json").read_text())
     assert data["hard_failures"]
+
+
+def test_doctor_fails_on_insufficient_historical_coverage(tmp_path: Path) -> None:
+    art = tmp_path / "art"
+    _seed_artifacts(art, include_optional=True)
+    b = json.loads((art / "artifact_bundle.json").read_text())
+    b["coverage"]["book_ticker"] = 0.2
+    (art / "artifact_bundle.json").write_text(json.dumps(b))
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "qa_doctor.py"
+    proc = subprocess.run(
+        [sys.executable, str(script), "--artifacts", str(art)],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    data = json.loads((art / "doctor_report.json").read_text())
+    assert any("Insufficient historical coverage" in x for x in data["hard_failures"])
+
+
+def test_doctor_rejects_schema_mismatch(tmp_path: Path) -> None:
+    art = tmp_path / "art"
+    _seed_artifacts(art, include_optional=True)
+    b = json.loads((art / "artifact_bundle.json").read_text())
+    b["schema_version"] = "legacy-1"
+    (art / "artifact_bundle.json").write_text(json.dumps(b))
+
+    script = Path(__file__).resolve().parents[1] / "scripts" / "qa_doctor.py"
+    proc = subprocess.run(
+        [sys.executable, str(script), "--artifacts", str(art)],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    data = json.loads((art / "doctor_report.json").read_text())
+    assert any("schema_version mismatch" in x for x in data["hard_failures"])

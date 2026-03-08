@@ -16,10 +16,33 @@ export UI_DATA_DIR="${UI_DATA_DIR:-$ROOT_DIR/ui_data}"
 
 mkdir -p "$UI_DATA_DIR"
 
+mask_wallet() {
+  local w="$1"
+  if [[ -z "$w" ]]; then
+    echo "<empty>"
+  elif [[ ${#w} -le 10 ]]; then
+    echo "***"
+  else
+    echo "${w:0:4}...${w: -4}"
+  fi
+}
+
+mask_rpc() {
+  local u="$1"
+  if [[ -z "$u" ]]; then
+    echo "<empty>"
+    return
+  fi
+  # mask common api-key query values
+  local m
+  m="$(echo "$u" | sed -E 's/(api-key=)[^&]+/\1***MASKED***/g; s/(apikey=)[^&]+/\1***MASKED***/g')"
+  echo "$m"
+}
+
 echo "[quantum_analyzer UI]"
 echo "ARTIFACT_DIR=$ARTIFACT_DIR"
-echo "SOL_RPC_URL=$SOL_RPC_URL"
-echo "BENCHMARK_WALLET=${BENCHMARK_WALLET:-<empty>}"
+echo "SOL_RPC_URL=$(mask_rpc "$SOL_RPC_URL")"
+echo "BENCHMARK_WALLET=$(mask_wallet "$BENCHMARK_WALLET")"
 echo "UI_DATA_DIR=$UI_DATA_DIR"
 
 if [[ ! -f "$ARTIFACT_DIR/artifact_bundle.json" ]]; then

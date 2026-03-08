@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
 import time
 from typing import Any
 from urllib.parse import urlencode
@@ -133,33 +134,62 @@ class BinanceClient:
         ]
 
     def fetch_agg_trades(self, symbol: str, start_ms: int, end_ms: int) -> list[dict[str, Any]]:
-        # Binance endpoint limit is 1000; we page by fromId fallback to time windows.
-        data = self._get_json(
-            SPOT_API,
-            "/api/v3/aggTrades",
-            {"symbol": symbol, "startTime": start_ms, "endTime": end_ms, "limit": 1000},
-        )
+        """Paginate aggTrades over full requested time range.
+
+        Fail closed on empty windows by returning only truly fetched rows;
+        no synthetic backfill is introduced.
+        """
+        cursor = start_ms
         ingest_ts = int(time.time() * 1000)
         rows: list[dict[str, Any]] = []
-        for t in data:
-            trade_ts = int(t["T"])
-            rows.append(
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "source": "binance_spot_agg_trades",
-                    "market": "spot",
-                    "symbol": symbol,
-                    "agg_trade_id": int(t["a"]),
-                    "price": float(t["p"]),
-                    "qty": float(t["q"]),
-                    "first_trade_id": int(t["f"]),
-                    "last_trade_id": int(t["l"]),
-                    "trade_time_ms": trade_ts,
-                    "is_buyer_maker": bool(t["m"]),
-                    "source_ts_ms": trade_ts,
-                    "ingest_ts_ms": ingest_ts,
-                }
+        seen_ids: set[int] = set()
+
+        while cursor <= end_ms:
+            data = self._get_json(
+                SPOT_API,
+                "/api/v3/aggTrades",
+                {"symbol": symbol, "startTime": cursor, "endTime": end_ms, "limit": 1000},
             )
+            if not data:
+                break
+
+            last_trade_ts = cursor
+            for t in data:
+                trade_id = int(t["a"])
+                if trade_id in seen_ids:
+                    continue
+                seen_ids.add(trade_id)
+
+                trade_ts = int(t["T"])
+                if trade_ts < start_ms or trade_ts > end_ms:
+                    continue
+
+                rows.append(
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "source": "binance_spot_agg_trades",
+                        "market": "spot",
+                        "symbol": symbol,
+                        "agg_trade_id": trade_id,
+                        "price": float(t["p"]),
+                        "qty": float(t["q"]),
+                        "first_trade_id": int(t["f"]),
+                        "last_trade_id": int(t["l"]),
+                        "trade_time_ms": trade_ts,
+                        "is_buyer_maker": bool(t["m"]),
+                        "source_ts_ms": trade_ts,
+                        "ingest_ts_ms": ingest_ts,
+                    }
+                )
+                last_trade_ts = max(last_trade_ts, trade_ts)
+
+            if len(data) < 1000:
+                break
+            # advance cursor; +1 to avoid replaying same event time bucket forever
+            if last_trade_ts <= cursor:
+                break
+            cursor = last_trade_ts + 1
+
         return rows
 
     def fetch_funding(self, symbol: str, start_ms: int, end_ms: int) -> list[dict[str, Any]]:
@@ -214,18 +244,36 @@ def _to_ms(dt: datetime) -> int:
     return int(dt.timestamp() * 1000)
 
 
+def _coverage_ratio_rows(rows: list[dict[str, Any]], start_ms: int, end_ms: int, ts_field: str = "source_ts_ms") -> float:
+    if not rows:
+        return 0.0
+    ts = sorted(int(r.get(ts_field, 0) or 0) for r in rows if r.get(ts_field) is not None)
+    if not ts:
+        return 0.0
+    span = max(end_ms - start_ms, 1)
+    covered = max(min(ts[-1], end_ms) - max(ts[0], start_ms), 0)
+    return float(min(1.0, covered / span))
+
+
 def backfill_range(
     cfg: BinanceIngestConfig,
     start: datetime,
     end: datetime,
     symbols: list[str],
     intervals: list[str],
-) -> dict[str, int]:
+) -> dict[str, int | float]:
     client = BinanceClient(cfg)
     start_ms = _to_ms(start)
     end_ms = _to_ms(end)
 
-    counts: dict[str, int] = {}
+    counts: dict[str, int | float] = {}
+    coverage: dict[str, float] = {
+        "agg_trades": 0.0,
+        "book_ticker": 0.0,
+        "open_interest": 0.0,
+        "basis": 0.0,
+        "funding": 0.0,
+    }
 
     for symbol in symbols:
         for interval in intervals:
@@ -238,49 +286,60 @@ def backfill_range(
                 symbol=symbol,
                 timeframe=interval,
                 ts_field="source_ts_ms",
+                overwrite=False,
             )
             counts[f"klines:{symbol}:{interval}"] = len(klines)
             counts[f"files:klines:{symbol}:{interval}"] = len(files)
+            counts[f"rows_written:klines:{symbol}:{interval}"] = int(sum(int(f.get("rows", 0) or 0) for f in files))
+            counts[f"checksums:klines:{symbol}:{interval}"] = len({f.get('checksum_sha256') for f in files})
 
-        book = client.fetch_book_ticker(symbol)
-        write_partitioned_parquet(book, cfg.out_dir, "book_ticker", "spot", symbol, ts_field="source_ts_ms")
+        # Historical backfill: aggTrades is time-series and safe to paginate.
+        # Do NOT persist one-off bookTicker snapshots as historical liquidity.
         agg = client.fetch_agg_trades(symbol, start_ms, end_ms)
-        write_partitioned_parquet(agg, cfg.out_dir, "agg_trades", "spot", symbol, ts_field="source_ts_ms")
+        agg_files = write_partitioned_parquet(agg, cfg.out_dir, "agg_trades", "spot", symbol, ts_field="source_ts_ms", overwrite=False)
         counts[f"agg:{symbol}"] = len(agg)
+        counts[f"files:agg:{symbol}"] = len(agg_files)
+        counts[f"rows_written:agg:{symbol}"] = int(sum(int(f.get("rows", 0) or 0) for f in agg_files))
+        counts[f"checksums:agg:{symbol}"] = len({f.get('checksum_sha256') for f in agg_files})
+        counts[f"book_ticker:{symbol}"] = 0
+        coverage["agg_trades"] = max(coverage["agg_trades"], _coverage_ratio_rows(agg, start_ms, end_ms, ts_field="source_ts_ms"))
 
     # Futures: SOLUSDT perpetual
     futures_symbol = "SOLUSDT"
     funding = client.fetch_funding(futures_symbol, start_ms, end_ms)
-    write_partitioned_parquet(funding, cfg.out_dir, "funding", "futures", futures_symbol, ts_field="source_ts_ms")
+    funding_files = write_partitioned_parquet(funding, cfg.out_dir, "funding", "futures", futures_symbol, ts_field="source_ts_ms", overwrite=False)
     counts["funding:SOLUSDT"] = len(funding)
+    counts["files:funding:SOLUSDT"] = len(funding_files)
+    counts["rows_written:funding:SOLUSDT"] = int(sum(int(f.get("rows", 0) or 0) for f in funding_files))
+    counts["checksums:funding:SOLUSDT"] = len({f.get('checksum_sha256') for f in funding_files})
+    coverage["funding"] = _coverage_ratio_rows(funding, start_ms, end_ms, ts_field="source_ts_ms")
 
-    oi = client.fetch_open_interest(futures_symbol)
-    write_partitioned_parquet(oi, cfg.out_dir, "open_interest", "futures", futures_symbol, ts_field="source_ts_ms")
-    counts["open_interest:SOLUSDT"] = len(oi)
+    # Historical backfill must not fabricate one-off OI/basis snapshots.
+    # Persisting only true sampled time-series is allowed.
+    counts["open_interest:SOLUSDT"] = 0
+    counts["basis:SOLUSDT"] = 0
 
-    # Basis proxy: spot mid vs perpetual mark sampled at ingest time.
-    now_ms = int(time.time() * 1000)
-    spot = client.fetch_book_ticker("SOLUSDT")[0]
-    perp_oi = oi[0]
-    perp_mark = funding[-1]["mark_price"] if funding else spot["ask_price"]
-    spot_mid = (spot["bid_price"] + spot["ask_price"]) / 2
-    basis_bps = ((perp_mark - spot_mid) / spot_mid) * 10_000 if spot_mid else 0.0
-    basis_row = [
-        {
-            "schema_version": SCHEMA_VERSION,
-            "source": "binance_futures_basis_proxy",
-            "market": "futures",
-            "symbol": "SOLUSDT",
-            "event_time_ms": now_ms,
-            "spot_mid": float(spot_mid),
-            "perp_mid": float(perp_mark),
-            "basis_bps": float(basis_bps),
-            "source_ts_ms": now_ms,
-            "ingest_ts_ms": now_ms,
-        }
-    ]
-    write_partitioned_parquet(basis_row, cfg.out_dir, "basis", "futures", "SOLUSDT", ts_field="source_ts_ms")
-    counts["basis:SOLUSDT"] = 1
+    # explicit source coverage diagnostics persisted for doctor/feature gating
+    counts["coverage:agg_trades"] = coverage["agg_trades"]
+    counts["coverage:book_ticker"] = coverage["book_ticker"]
+    counts["coverage:open_interest"] = coverage["open_interest"]
+    counts["coverage:basis"] = coverage["basis"]
+    counts["coverage:funding"] = coverage["funding"]
+
+    cov_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "coverage": coverage,
+        "notes": {
+            "book_ticker": "historical book_ticker sampling not available in this backfill path",
+            "open_interest": "one-off snapshot disabled for historical backfills",
+            "basis": "one-off basis snapshot disabled for historical backfills",
+        },
+    }
+    cov_path = Path(cfg.out_dir) / "source_coverage.json"
+    cov_path.parent.mkdir(parents=True, exist_ok=True)
+    cov_path.write_text(json.dumps(cov_payload, indent=2), encoding="utf-8")
 
     return counts
 

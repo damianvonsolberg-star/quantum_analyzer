@@ -64,13 +64,32 @@ def test_fetch_sol_price(monkeypatch):
     assert px == pytest.approx(150.25)
 
 
-def test_portfolio_snapshot_and_advice():
+def test_wallet_delta_output_is_explicit_for_spot_mode():
     bal = WalletBalances(wallet="abc", sol=10.0, usdc=500.0)
     snap = build_portfolio_snapshot(bal, sol_price_usd=100.0)
     assert snap.sol_mtm_usd == pytest.approx(1000.0)
     assert snap.total_nav_usd == pytest.approx(1500.0)
 
-    adv = advice_from_target(snap, target_position=0.5)
-    assert adv.target_sol_weight == pytest.approx(0.5)
+    adv = advice_from_target(snap, target_position=0.5, advisory_mode="spot_only", target_scope="advisory_sleeve")
+    assert adv.spot_implementable_target_weight == pytest.approx(0.5)
     assert adv.recommended_delta_usd == pytest.approx(-250.0)
     assert adv.recommended_delta_sol == pytest.approx(-2.5)
+    assert adv.action_label == "BUY SPOT"
+
+
+def test_negative_target_position_spot_warning():
+    bal = WalletBalances(wallet="abc", sol=10.0, usdc=500.0)
+    snap = build_portfolio_snapshot(bal, sol_price_usd=100.0)
+    adv = advice_from_target(snap, target_position=-0.4, advisory_mode="spot_only", target_scope="whole_wallet")
+    assert adv.unsupported_in_spot is True
+    assert adv.spot_implementable_target_weight == 0.0
+    assert any("Not implementable in spot-only workflow" in w for w in adv.warnings)
+
+
+def test_spot_mode_does_not_silently_clip_without_notice():
+    bal = WalletBalances(wallet="abc", sol=0.0, usdc=1500.0)
+    snap = build_portfolio_snapshot(bal, sol_price_usd=100.0)
+    adv = advice_from_target(snap, target_position=-0.1, advisory_mode="spot_only")
+    assert adv.model_target_position == pytest.approx(-0.1)
+    assert adv.spot_implementable_target_weight == 0.0
+    assert adv.warnings

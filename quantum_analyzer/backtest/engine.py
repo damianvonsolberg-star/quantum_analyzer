@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from quantum_analyzer.forecast.mixture import build_forecast_bundle
 from quantum_analyzer.paths.archetypes import PathTemplate
 from quantum_analyzer.policy.risk_caps import DrawdownState, RegimeCaps
 from quantum_analyzer.policy.target_position import PolicyInputs, propose_action
+from quantum_analyzer.contracts import ARTIFACT_SCHEMA_V2
 from quantum_analyzer.state.latent_model import GaussianHMMBaseline
 
 
@@ -170,16 +172,55 @@ def run_backtest(
     if out_dir is not None:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
-        # live-ready artifact bundle
+
+        latest_ts = str(eq_df.index[-1]) if not eq_df.empty else None
+        latest_action = act_df.iloc[-1].to_dict() if not act_df.empty else {
+            "action": "HOLD",
+            "target_position": 0.0,
+            "expected_edge_bps": 0.0,
+            "expected_cost_bps": 0.0,
+            "reason": "no_actions",
+        }
+        calibration_score = float(max(0.0, 1.0 - cal))
+
+        # canonical artifact bundle v2
         with (out / "artifact_bundle.json").open("w", encoding="utf-8") as f:
             json.dump(
                 {
+                    "schema_version": ARTIFACT_SCHEMA_V2,
+                    "artifact_meta": {
+                        "producer": "quantum_analyzer.backtest.engine",
+                        "produced_at": datetime.now(timezone.utc).isoformat(),
+                        "latest_timestamp": latest_ts,
+                    },
+                    "forecast": {
+                        "confidence": float(latest_action.get("p_up", 0.0) or 0.0),
+                        "entropy": None,
+                        "calibration_score": calibration_score,
+                        "distributions": {"h12": {}, "h36": {}, "h72": {}},
+                        "timestamps": {"as_of": latest_ts},
+                    },
+                    "proposal": {
+                        "id": str(latest_action.get("proposal_id", "")),
+                        "timestamp": str(latest_action.get("ts", latest_ts)),
+                        "action": str(latest_action.get("action", "HOLD")),
+                        "target_position": float(latest_action.get("target_position", 0.0) or 0.0),
+                        "expected_edge_bps": float(latest_action.get("expected_edge_bps", 0.0) or 0.0),
+                        "expected_cost_bps": float(latest_action.get("expected_cost_bps", 0.0) or 0.0),
+                        "reason": str(latest_action.get("reason", "")),
+                    },
+                    "drift": {
+                        "governance_status": "OK",
+                        "kill_switch": False,
+                        "kill_switch_reasons": [],
+                        "timestamps": {"as_of": latest_ts},
+                    },
                     "summary": summary,
                     "config": {
                         "walkforward": wf_cfg.__dict__,
                         "backtest": bt_cfg.__dict__,
+                        "template_count": len(templates),
                     },
-                    "template_count": len(templates),
                 },
                 f,
                 indent=2,

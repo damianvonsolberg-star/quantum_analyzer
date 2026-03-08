@@ -9,19 +9,19 @@ This UI **does not**:
 - sign transactions
 - use private keys
 - call exchange execution APIs
+- retrain models at runtime
 
 It only reads artifacts + market/wallet data and provides operator guidance.
 
 ---
 
-## Quick start
+## Quick start (one command)
 
-### Option A: one command
 ```bash
 make ui
 ```
 
-### Option B: script
+Equivalent:
 ```bash
 ./scripts/run_ui.sh
 ```
@@ -30,6 +30,16 @@ Both start:
 ```bash
 streamlit run ui/app.py
 ```
+
+---
+
+## Production-safe launch expectations
+
+- Runtime logs mask sensitive values (wallet/RPC API key query params).
+- Missing artifacts should degrade safely with explicit warnings (not crash).
+- UI remains advisory-only; no execution path is enabled.
+- Use non-root container runtime for pilot deployments (`Dockerfile.ui`).
+- Health endpoint is monitored in container mode.
 
 ---
 
@@ -86,7 +96,26 @@ UI should not crash on partial diagnostics.
 
 ---
 
-## Manual smoke test (5 min)
+## Validation commands
+
+UI-focused tests:
+```bash
+make test-ui
+```
+
+Full project tests:
+```bash
+make test
+```
+
+Optional shell lint:
+```bash
+make lint-shell
+```
+
+---
+
+## Manual smoke test checklist (5 min)
 
 1. Start UI:
    ```bash
@@ -96,7 +125,9 @@ UI should not crash on partial diagnostics.
 3. Verify pages open without errors.
 4. Live Advice:
    - click refresh wallet/price
+   - confirm freshness badges (artifact + live refresh) render
    - confirm NAV, allocation, and advisory deltas render.
+   - confirm target semantics line clearly shows generic model target vs spot actionable target and scope (whole wallet vs sleeve).
 5. Backtest:
    - confirm KPI cards + equity/drawdown charts.
 6. Templates:
@@ -106,6 +137,28 @@ UI should not crash on partial diagnostics.
 8. Journal:
    - add one BUY fill and one SELL fill
    - verify net qty / avg entry / PnL updates.
+
+---
+
+## Container (optional)
+
+Build:
+```bash
+docker build -f Dockerfile.ui -t quantum-analyzer-ui .
+```
+
+Run:
+```bash
+docker run --rm -p 8501:8501 \
+  -e ARTIFACT_DIR=/app/artifacts \
+  -e SOL_RPC_URL="https://api.mainnet-beta.solana.com" \
+  -e BENCHMARK_WALLET="" \
+  quantum-analyzer-ui
+```
+
+Notes:
+- container runs as non-root `appuser`
+- healthcheck probes `/_stcore/health`
 
 ---
 

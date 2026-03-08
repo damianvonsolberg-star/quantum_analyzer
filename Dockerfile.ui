@@ -1,5 +1,8 @@
 FROM python:3.11-slim
 
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 COPY requirements-ui.txt ./
@@ -7,11 +10,21 @@ RUN pip install --no-cache-dir -r requirements-ui.txt
 
 COPY . .
 
+# Non-root runtime user for safer production pilot defaults
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/ui_data /app/artifacts \
+    && chown -R appuser:appuser /app
+
 ENV ARTIFACT_DIR=/app/artifacts
 ENV SOL_RPC_URL=https://api.mainnet-beta.solana.com
 ENV BENCHMARK_WALLET=
 ENV UI_DATA_DIR=/app/ui_data
 
+USER appuser
+
 EXPOSE 8501
 
-CMD ["streamlit", "run", "ui/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)" || exit 1
+
+CMD ["python", "-m", "streamlit", "run", "ui/app.py", "--server.address=0.0.0.0", "--server.port=8501"]

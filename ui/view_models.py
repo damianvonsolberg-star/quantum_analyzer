@@ -9,6 +9,7 @@ class UiForecastView:
     horizons: list[str] = field(default_factory=list)
     entropy: float | None = None
     confidence: float | None = None
+    calibration_score: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -24,6 +25,8 @@ class UiLiveAdvice:
     entropy: float | None
     risk_note: str
     reasons: list[str] = field(default_factory=list)
+    advisory_mode: str = "spot_only"
+    target_scope: str = "advisory_sleeve"
 
 
 @dataclass
@@ -53,6 +56,8 @@ class UiDriftStatus:
     hard_failures: list[str] = field(default_factory=list)
     latest_timestamp: str | None = None
     schema_versions: list[str] = field(default_factory=list)
+    governance_status: str | None = None
+    governance_payload: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
 

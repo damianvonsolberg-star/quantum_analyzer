@@ -100,7 +100,12 @@ if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None
         current_sol_weight=snap.current_sol_weight or 0.0,
         dry_powder_usd=snap.dry_powder_usd or 0.0,
     )
-    portfolio_advice = advice_from_target(ps, ui_advice.target_position)
+    portfolio_advice = advice_from_target(
+        ps,
+        ui_advice.target_position,
+        advisory_mode="spot_only",
+        target_scope="advisory_sleeve",
+    )
 
 render_headline_card(rec.light, rec.action_text, "Simple advisory view (read-only)")
 
@@ -112,9 +117,9 @@ m4.metric("Current SOL Allocation", f"{(snap.current_sol_weight or 0.0)*100:.2f}
 
 n1, n2, n3 = st.columns(3)
 if portfolio_advice is not None:
-    n1.metric("Recommended Delta USD", f"{portfolio_advice.recommended_delta_usd:+,.2f}")
-    n2.metric("Recommended Delta SOL", f"{portfolio_advice.recommended_delta_sol:+.4f}")
-    n3.metric("Target Allocation", f"{portfolio_advice.post_trade_target_sol_weight*100:.2f}%")
+    n1.metric("Recommended Delta USD (spot actionable)", f"{portfolio_advice.recommended_delta_usd:+,.2f}")
+    n2.metric("Recommended Delta SOL (spot actionable)", f"{portfolio_advice.recommended_delta_sol:+.4f}")
+    n3.metric("Spot Target Allocation", f"{portfolio_advice.post_trade_target_sol_weight*100:.2f}%")
 else:
     n1.metric("Recommended Delta USD", "n/a")
     n2.metric("Recommended Delta SOL", "n/a")
@@ -125,14 +130,54 @@ s1.metric("Confidence", f"{(ui_advice.confidence or 0.0):.2f}")
 s2.metric("Entropy", f"{(ui_advice.entropy or 0.0):.2f}")
 s3.metric("Edge vs Cost (bps)", f"{ui_advice.expected_edge_bps:.2f} / {ui_advice.expected_cost_bps:.2f}")
 
+gov_status = (drift.governance_status or ("OK" if drift.ok else "HALT")).upper()
+gov_reasons = drift.hard_failures[:3]
+
+st.markdown(f"**Governance status:** {gov_status}")
+if gov_reasons:
+    st.markdown("**Governance reasons:** " + ", ".join(gov_reasons))
+
+if portfolio_advice is not None:
+    st.markdown(f"**Main spot recommendation:** {portfolio_advice.action_label}")
+    st.markdown(
+        f"**Target semantics:** model target_position={portfolio_advice.model_target_position:+.3f} (generic model target), "
+        f"spot actionable target={portfolio_advice.spot_implementable_target_weight:+.3f} (spot only), "
+        f"scope={portfolio_advice.target_scope} (whole wallet vs advisory sleeve), mode={portfolio_advice.advisory_mode}."
+    )
+    if portfolio_advice.warnings:
+        for w in portfolio_advice.warnings[:3]:
+            st.warning(w)
+
+# explicit reduced-trust warning when drift diagnostics are incomplete
+if gov_status in {"WATCH", "HALT"} and not gov_reasons:
+    st.warning("Reduced-trust mode: drift/doctor details are incomplete. Treat advisory conservatively until diagnostics are fully available.")
+
 st.markdown(f"**Tail risk note:** {rec.tail_risk_note}")
 st.markdown("**Top 3 reasons:** " + (", ".join(rec.top_reasons[:3]) if rec.top_reasons else "n/a"))
 st.markdown("**Top 3 risks:** " + (", ".join(rec.top_risks[:3]) if rec.top_risks else "n/a"))
 st.markdown(f"**What would change the light:** {rec.what_changes_light}")
 
+def _freshness_badge(ts_str: str | None, label: str) -> str:
+    if not ts_str:
+        return f"🔴 {label}: missing"
+    try:
+        t = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        age_min = (now - t).total_seconds() / 60.0
+        if age_min <= 180:
+            return f"🟢 {label}: fresh ({age_min:.0f}m)"
+        if age_min <= 360:
+            return f"🟡 {label}: stale ({age_min:.0f}m)"
+        return f"🔴 {label}: very stale ({age_min:.0f}m)"
+    except Exception:
+        return f"🔴 {label}: invalid timestamp"
+
+
 l1, l2 = st.columns(2)
-l1.caption(f"Last artifact timestamp: {ui_advice.timestamp}")
-l2.caption(f"Last live refresh timestamp: {st.session_state.get('last_live_refresh_ts', 'not refreshed')}")
+artifact_ts = ui_advice.timestamp
+live_ts = st.session_state.get('last_live_refresh_ts', None)
+l1.caption(_freshness_badge(artifact_ts, "Artifact timestamp"))
+l2.caption(_freshness_badge(live_ts, "Live wallet/price refresh"))
 
 with st.expander("Advanced stats"):
     st.json(

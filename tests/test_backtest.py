@@ -6,7 +6,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import json
+
 from quantum_analyzer.backtest.engine import BacktestConfig, run_backtest
+from quantum_analyzer.contracts import ARTIFACT_SCHEMA_V2
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig, purged_walkforward_splits
 from quantum_analyzer.paths.archetypes import PathTemplate
 
@@ -72,6 +75,16 @@ def test_run_backtest_and_export_bundle(tmp_path: Path) -> None:
     assert (tmp_path / "artifact_bundle.json").exists()
     assert (tmp_path / "equity_curve.csv").exists()
     assert (tmp_path / "actions.csv").exists()
+
+    bundle = json.loads((tmp_path / "artifact_bundle.json").read_text())
+    assert bundle["schema_version"] == ARTIFACT_SCHEMA_V2
+    for sec in ["artifact_meta", "forecast", "proposal", "drift", "summary", "config"]:
+        assert sec in bundle
+
+    # forecast/proposal timestamp provenance must be market-derived and aligned
+    assert bundle["artifact_meta"].get("latest_timestamp") is not None
+    assert bundle["forecast"].get("timestamps", {}).get("as_of") == bundle["artifact_meta"].get("latest_timestamp")
+    assert bundle["proposal"].get("timestamp") is not None
 
 
 def test_90day_walkforward_local_data_contract(tmp_path: Path) -> None:

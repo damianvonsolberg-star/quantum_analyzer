@@ -11,7 +11,6 @@ if str(ROOT) not in sys.path:
 
 from ui.adapters import ArtifactAdapter
 from ui.components import artifact_banner, render_headline_card, sidebar_controls
-from ui.drift_view import build_drift_view
 from ui.state import init_state
 
 
@@ -23,52 +22,44 @@ st.caption("Should we trust the model right now?")
 artifact_banner()
 
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])
-raw = adapter.load_raw()
-doctor = raw.get("doctor") if isinstance(raw.get("doctor"), dict) else {}
-bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
+vm = adapter.to_drift_status()
+gov = vm.raw.get("governance", {}) if isinstance(vm.raw, dict) else {}
+status = (vm.governance_status or ("OK" if vm.ok else "HALT")).upper()
 
-# optional drift payload locations
-optional_drift = {}
-if isinstance(bundle.get("drift"), dict):
-    optional_drift = bundle.get("drift", {})
-elif isinstance(bundle.get("monitoring"), dict) and isinstance(bundle.get("monitoring", {}).get("drift"), dict):
-    optional_drift = bundle.get("monitoring", {}).get("drift", {})
-
-vm = build_drift_view(doctor, optional_drift)
-
-render_headline_card(vm.overall_status, "Governance Status", vm.recommended_response)
+response = "continue advisory" if status == "OK" else ("reduce trust" if status == "WATCH" else "halt usage")
+render_headline_card(status, "Governance Status", response)
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Artifact Freshness", vm.artifact_freshness)
-c2.metric("Data Freshness", vm.data_freshness)
-c3.metric("Operator Response", vm.recommended_response.upper())
+c1.metric("Artifact Staleness", str(gov.get("artifact_staleness", "unknown")))
+c2.metric("Data Staleness", str(gov.get("data_staleness", "unknown")))
+c3.metric("Operator Response", response.upper())
 
 d1, d2, d3 = st.columns(3)
-d1.metric("Feature Drift", vm.feature_drift)
-d2.metric("Calibration Drift", vm.calibration_drift)
-d3.metric("State Occupancy Drift", vm.state_occupancy_drift)
+d1.metric("Feature Drift", f"{float(gov.get('feature_drift', 0.0)):.4f}")
+d2.metric("Calibration Drift", f"{float(gov.get('calibration_drift', 0.0)):.4f}")
+d3.metric("State Occupancy Drift", f"{float(gov.get('state_occupancy_drift', 0.0)):.4f}")
 
 x1, x2 = st.columns(2)
-x1.metric("Action-Rate Drift", vm.action_rate_drift)
-x2.metric("Cost/Slippage Drift", vm.cost_drift)
+x1.metric("Action-Rate Drift", f"{float(gov.get('action_rate_drift', 0.0)):.4f}")
+x2.metric("Cost Drift (bps)", f"{float(gov.get('cost_drift_bps', 0.0)):.4f}")
 
+reasons = gov.get("kill_switch_reasons", []) if isinstance(gov.get("kill_switch_reasons"), list) else vm.hard_failures
 st.subheader("Kill-switch reasons")
-if vm.kill_switch_reasons:
-    for r in vm.kill_switch_reasons:
+if reasons:
+    for r in reasons:
         st.error(f"- {r}")
 else:
     st.info("No explicit kill-switch reason reported.")
 
 st.subheader("Recommended operator response")
-if vm.recommended_response == "continue advisory":
+if response == "continue advisory":
     st.success("Continue advisory mode. Monitor normally.")
-elif vm.recommended_response == "reduce trust":
+elif response == "reduce trust":
     st.warning("Reduce trust: keep advisory only, lower sizing confidence, wait for cleaner diagnostics.")
 else:
     st.error("HALT usage until diagnostics/freshness issues are resolved.")
 
-st.caption(f"Latest artifact timestamp: {vm.latest_artifact_ts or 'not yet implemented'}")
-st.caption(f"Latest live timestamp: {vm.latest_live_ts or 'not yet implemented'}")
+st.caption(f"Latest artifact timestamp: {vm.latest_timestamp or 'not available'}")
 
-with st.expander("Raw diagnostics"):
-    st.json({"doctor": doctor, "drift": optional_drift})
+with st.expander("Raw governance payload"):
+    st.json(gov if gov else vm.raw)

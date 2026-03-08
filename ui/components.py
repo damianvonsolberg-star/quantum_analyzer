@@ -30,9 +30,6 @@ def sidebar_controls() -> None:
     st.session_state["artifact_dir"] = st.sidebar.text_input("Artifact directory", st.session_state["artifact_dir"])
     st.session_state["wallet_address"] = st.sidebar.text_input("Wallet address (BENCHMARK_WALLET)", st.session_state["wallet_address"])
     st.session_state["rpc_url"] = st.sidebar.text_input("Solana RPC URL (SOL_RPC_URL)", st.session_state["rpc_url"])
-    st.session_state["refresh_seconds"] = st.sidebar.number_input(
-        "Auto-refresh interval (sec)", min_value=5, max_value=3600, value=int(st.session_state["refresh_seconds"])
-    )
     if st.sidebar.button("Refresh now"):
         st.rerun()
 

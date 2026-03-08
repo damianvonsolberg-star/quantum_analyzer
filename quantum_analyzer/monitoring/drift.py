@@ -43,3 +43,20 @@ def cost_drift(ref_cost_bps: pd.Series, cur_cost_bps: pd.Series) -> float:
     if len(ref_cost_bps) == 0 or len(cur_cost_bps) == 0:
         return 0.0
     return float(abs(cur_cost_bps.mean() - ref_cost_bps.mean()))
+
+
+def canonical_drift_metrics(
+    *,
+    feature_psi_max: float,
+    calibration_drift: float,
+    state_occupancy_drift_value: float,
+    action_rate_drift_value: float,
+    cost_drift_bps: float,
+) -> dict[str, float]:
+    return {
+        "feature_drift": float(feature_psi_max),
+        "calibration_drift": float(calibration_drift),
+        "state_occupancy_drift": float(state_occupancy_drift_value),
+        "action_rate_drift": float(action_rate_drift_value),
+        "cost_drift_bps": float(cost_drift_bps),
+    }

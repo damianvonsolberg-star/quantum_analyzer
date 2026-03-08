@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 SPOT_SYMBOLS = ["SOLUSDT", "SOLUSDC", "BTCUSDT", "ETHUSDT"]
 KLINE_INTERVALS = ["1m", "5m", "15m", "1h", "4h"]
@@ -104,4 +104,22 @@ BASIS_COLUMNS = [
     "basis_bps",
     "source_ts_ms",
     "ingest_ts_ms",
+]
+
+# Coverage / provenance diagnostics for historical source validity.
+SOURCE_COVERAGE_KEYS = [
+    "agg_trades",
+    "book_ticker",
+    "open_interest",
+    "basis",
+    "funding",
+]
+
+FEATURE_COVERAGE_COLUMNS = [
+    "coverage_agg_trades",
+    "coverage_book_ticker",
+    "coverage_open_interest",
+    "coverage_basis",
+    "historical_liquidity_ok",
+    "historical_derivatives_ok",
 ]

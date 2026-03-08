@@ -89,3 +89,21 @@ def test_turnover_cap_respected() -> None:
     )
     ap = propose_action(inp)
     assert abs(ap.target_position - inp.current_position) <= inp.turnover_cap + 1e-9
+
+
+def test_policy_contract_supports_generic_and_spot_specific_targets() -> None:
+    fc = _bundle(mean=-0.02, p_up=0.2, p_break_down=0.5)
+    inp = PolicyInputs(
+        forecast=fc,
+        estimated_round_trip_cost_bps=2,
+        current_position=0.0,
+        regime="breakdown_down",
+        drawdown_state=DrawdownState(drawdown_pct=-0.01),
+        regime_caps=RegimeCaps(),
+    )
+    ap = propose_action(inp)
+    assert ap.ts == fc.ts
+    assert "generic_target_position" in ap.controls
+    assert "spot_implementable_target_position" in ap.controls
+    assert ap.advisory_mode == "spot_only"
+    assert ap.target_scope == "advisory_sleeve"

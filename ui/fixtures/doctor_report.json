@@ -1,5 +1,5 @@
 {
-  "artifact_dir": "/Users/damian/.openclaw/workspace/quantum_analyzer/ui/fixtures",
+  "artifact_dir": "ui/fixtures",
   "checks": [
     {
       "name": "artifact_bundle.json",

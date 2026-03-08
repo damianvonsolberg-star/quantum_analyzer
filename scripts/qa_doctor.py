@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ui.contracts import ArtifactCheck, DoctorReport  # noqa: E402
+from ui.contracts import ARTIFACT_SCHEMA_V2, REQUIRED_BUNDLE_SECTIONS_V2, ArtifactCheck, DoctorReport  # noqa: E402
 
 
 MANDATORY = ["artifact_bundle.json", "summary.json", "equity_curve.csv", "actions.csv"]
@@ -105,6 +105,37 @@ def _forecast_horizons(bundle: dict[str, Any] | None) -> list[str]:
     return sorted(horizons)
 
 
+def _extract_coverage(bundle: dict[str, Any] | None, artifacts_dir: Path) -> dict[str, float | None]:
+    out = {"agg_trades": None, "book_ticker": None, "open_interest": None, "basis": None}
+
+    # source of truth: explicit source_coverage.json (if present)
+    cov_file = artifacts_dir / "source_coverage.json"
+    if cov_file.exists():
+        cov_json = _read_json(cov_file)
+        cov = cov_json.get("coverage") if isinstance(cov_json, dict) and isinstance(cov_json.get("coverage"), dict) else None
+        if cov:
+            for k in out:
+                v = cov.get(k)
+                if isinstance(v, (float, int)):
+                    out[k] = float(v)
+            return out
+
+    if not isinstance(bundle, dict):
+        return out
+
+    coverage = bundle.get("coverage") if isinstance(bundle.get("coverage"), dict) else None
+    if coverage is None and isinstance(bundle.get("diagnostics"), dict):
+        maybe = bundle.get("diagnostics", {}).get("coverage")
+        coverage = maybe if isinstance(maybe, dict) else None
+
+    if coverage:
+        for k in out:
+            v = coverage.get(k)
+            if isinstance(v, (float, int)):
+                out[k] = float(v)
+    return out
+
+
 def validate_artifacts(artifacts_dir: Path) -> DoctorReport:
     report = DoctorReport(artifact_dir=str(artifacts_dir))
 
@@ -142,6 +173,37 @@ def validate_artifacts(artifacts_dir: Path) -> DoctorReport:
         _extract_schema_versions(summary, schema_versions)
 
     report.schema_versions = sorted(schema_versions)
+
+    # Canonical schema v2 validation (strict by default).
+    if isinstance(bundle, dict):
+        bsv = bundle.get("schema_version")
+        if bsv == ARTIFACT_SCHEMA_V2:
+            missing_sections = [k for k in REQUIRED_BUNDLE_SECTIONS_V2 if k not in bundle]
+            if missing_sections:
+                report.hard_failures.append(
+                    f"schema v2 bundle missing required sections: {', '.join(missing_sections)}"
+                )
+            else:
+                # required key fields
+                req_fields = {
+                    "forecast": ["confidence", "entropy", "calibration_score", "timestamps"],
+                    "proposal": ["timestamp", "action", "target_position", "expected_edge_bps", "expected_cost_bps"],
+                    "drift": ["governance_status"],
+                }
+                for sec, keys in req_fields.items():
+                    obj = bundle.get(sec)
+                    if not isinstance(obj, dict):
+                        report.hard_failures.append(f"schema v2 section {sec} must be an object")
+                        continue
+                    miss = [k for k in keys if k not in obj]
+                    if miss:
+                        report.hard_failures.append(f"schema v2 section {sec} missing fields: {', '.join(miss)}")
+        else:
+            report.hard_failures.append(
+                f"artifact_bundle.json schema_version mismatch: {bsv!r} != {ARTIFACT_SCHEMA_V2}"
+            )
+    else:
+        report.hard_failures.append("artifact_bundle.json malformed or unreadable")
 
     equity_df = pd.DataFrame()
     actions_df = pd.DataFrame()
@@ -181,6 +243,19 @@ def validate_artifacts(artifacts_dir: Path) -> DoctorReport:
         report.warnings.append("No forecast horizons found in artifact bundle")
     if not report.latest_proposal_action:
         report.warnings.append("No latest proposal/action found in actions.csv")
+
+    # Fail closed on missing/inadequate historical coverage diagnostics.
+    cov = _extract_coverage(bundle, artifacts_dir)
+    report.latest_backtest_metrics["coverage"] = cov
+    required_cov = {"agg_trades": 0.7, "book_ticker": 0.7, "open_interest": 0.7, "basis": 0.7}
+    for key, threshold in required_cov.items():
+        val = cov.get(key)
+        if val is None:
+            report.hard_failures.append(f"Missing historical coverage metric: {key}")
+        elif val < threshold:
+            report.hard_failures.append(
+                f"Insufficient historical coverage for {key}: {val:.3f} < {threshold:.3f}"
+            )
 
     return report
 

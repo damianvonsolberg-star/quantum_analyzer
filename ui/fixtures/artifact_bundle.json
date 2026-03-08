@@ -29,5 +29,11 @@
     "state_occupancy_drift": 0.06,
     "action_rate_drift": 0.04,
     "cost_drift": 4.5
+  },
+  "coverage": {
+    "agg_trades": 0.95,
+    "book_ticker": 0.95,
+    "open_interest": 0.95,
+    "basis": 0.95
   }
 }
