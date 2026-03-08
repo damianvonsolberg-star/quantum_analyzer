@@ -107,7 +107,8 @@ if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None
         target_scope="advisory_sleeve",
     )
 
-render_headline_card(rec.light, rec.action_text, "Simple advisory view (read-only)")
+display_action = portfolio_advice.action_label if portfolio_advice is not None else rec.action_text
+render_headline_card(rec.light, display_action, "Simple advisory view (read-only)")
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Wallet SOL", f"{(snap.sol or 0.0):.4f}")
@@ -139,6 +140,7 @@ if gov_reasons:
 
 if portfolio_advice is not None:
     st.markdown(f"**Main spot recommendation:** {portfolio_advice.action_label}")
+    st.markdown(f"**Model raw action field:** {ui_advice.headline_action}")
     st.markdown(
         f"**Target semantics:** model target_position={portfolio_advice.model_target_position:+.3f} (generic model target), "
         f"spot actionable target={portfolio_advice.spot_implementable_target_weight:+.3f} (spot only), "
@@ -182,6 +184,7 @@ l2.caption(_freshness_badge(live_ts, "Live wallet/price refresh"))
 with st.expander("Advanced stats"):
     st.json(
         {
+            "display_action": display_action,
             "live_advice": ui_advice.__dict__,
             "forecast": forecast.__dict__,
             "drift": drift.__dict__,
