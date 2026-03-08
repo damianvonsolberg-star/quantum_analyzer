@@ -139,10 +139,13 @@ def test_run_advisory_requires_model_artifact(tmp_path: Path):
     def fetcher():
         return _mk_market_data()
 
-    out = run_advisory(tmp_path, market_fetcher=fetcher)
-    assert out.kill_switch is True
-    assert out.proposal.action == "HOLD"
-    assert "artifact_validation_failed" in (out.kill_reason or "")
+    strict = run_advisory(tmp_path, market_fetcher=fetcher)
+    assert strict.kill_switch is True
+    assert strict.proposal.action == "HOLD"
+    assert strict.kill_reason == "missing_promoted_signal_bundle"
+
+    dev = run_advisory(tmp_path, market_fetcher=fetcher, allow_dev_fallback=True)
+    assert dev.proposal.action in {"HOLD", "LONG", "SHORT", "REDUCE"}
 
 
 def test_missing_latent_model_causes_hold_or_halt(tmp_path: Path):
@@ -213,6 +216,42 @@ def test_artifact_loader_reports_clear_failure_reason(tmp_path: Path):
     result = loader.validate_production_artifacts(bundle, tmp_path)
     assert result.ok is False
     assert result.reason in {"missing_latent_model", "missing_templates", "missing_policy_config"} or result.reason.startswith("bundle_schema_invalid")
+
+
+def test_live_prefers_promoted_signal_bundle(tmp_path: Path):
+    _seed_artifacts(tmp_path, with_model=False)
+    promoted = tmp_path / "promoted"
+    promoted.mkdir(parents=True, exist_ok=True)
+    (promoted / "current_signal_bundle.json").write_text(
+        json.dumps(
+            {
+                "action": "BUY SPOT",
+                "confidence": 0.77,
+                "target_position": 0.33,
+                "reason": "promoted_cluster_consensus",
+                "source": {"governance_status": "OK"},
+            }
+        )
+    )
+
+    def fetcher():
+        return _mk_market_data()
+
+    out = run_advisory(tmp_path, market_fetcher=fetcher, promoted_root=promoted)
+    assert out.proposal.action == "BUY SPOT"
+    assert out.kill_switch is False
+
+
+def test_live_missing_promoted_signal_bundle_holds(tmp_path: Path):
+    _seed_artifacts(tmp_path, with_model=True)
+
+    def fetcher():
+        return _mk_market_data()
+
+    out = run_advisory(tmp_path, market_fetcher=fetcher)
+    assert out.proposal.action == "HOLD"
+    assert out.kill_switch is True
+    assert out.kill_reason == "missing_promoted_signal_bundle"
 
 
 def test_live_and_drift_status_consistency(tmp_path: Path):

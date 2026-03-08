@@ -107,3 +107,15 @@ class ArtifactBundleV2(SerializableContract):
             summary=dict(d["summary"]),
             config=dict(d["config"]),
         )
+
+
+@dataclass
+class PromotedSignalBundle(SerializableContract):
+    status: str
+    action: str
+    confidence: float
+    target_position: float
+    reason: str
+    action_masses: dict[str, float] = field(default_factory=dict)
+    invalidation_reasons: list[str] = field(default_factory=list)
+    source: dict[str, Any] = field(default_factory=dict)

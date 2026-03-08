@@ -25,6 +25,14 @@ class ArtifactLoader:
     def __init__(self, artifacts_root: str | Path):
         self.artifacts_root = Path(artifacts_root)
 
+    def load_promoted_signal(self, promoted_root: str | Path | None = None) -> dict[str, Any] | None:
+        base = Path(promoted_root) if promoted_root else self.artifacts_root / "promoted"
+        p = base / "current_signal_bundle.json"
+        if not p.exists():
+            return None
+        with p.open("r", encoding="utf-8") as f:
+            return json.load(f)
+
     def latest_bundle_path(self) -> Path:
         bundles = sorted(self.artifacts_root.rglob("artifact_bundle.json"), key=lambda p: p.stat().st_mtime)
         if not bundles:

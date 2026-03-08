@@ -93,6 +93,7 @@ UI should not crash on partial diagnostics.
 - **Templates**: matched archetypes and “Why now?” explanation
 - **Drift & Governance**: OK/WATCH/HALT trust status and operator response
 - **Journal**: manual fills tracker (sqlite), realized/unrealized PnL, reconciliation
+- **Explorer**: one-click preset scan, leaderboard, and promoted signal bundle
 
 ---
 
@@ -101,6 +102,17 @@ UI should not crash on partial diagnostics.
 UI-focused tests:
 ```bash
 make test-ui
+```
+
+Explorer tests:
+```bash
+make test-explorer
+```
+
+Run explorer presets:
+```bash
+make explorer-fast
+make explorer-daily
 ```
 
 Full project tests:
@@ -137,6 +149,10 @@ make lint-shell
 8. Journal:
    - add one BUY fill and one SELL fill
    - verify net qty / avg entry / PnL updates.
+9. Explorer:
+   - run FAST preset from Explorer page
+   - verify run manifest and leaderboard render
+   - run promotion and verify current promoted signal appears
 
 ---
 

@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from .specs import ExperimentSpec
+
+
+def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
+    preset = preset.lower()
+    if preset == "fast":
+        windows = [24 * 14, 24 * 30]
+        tests = [24 * 5]
+        horizons = [12, 36]
+        subsets = ["geom_core", "geom_vol_cross"]
+    elif preset == "daily":
+        windows = [24 * 14, 24 * 30, 24 * 60, 24 * 90]
+        tests = [24 * 7, 24 * 10]
+        horizons = [12, 36, 72]
+        subsets = ["geom_core", "geom_vol", "geom_vol_cross", "geom_vol_flow", "full_stack"]
+    else:  # full
+        windows = [24 * 30, 24 * 60, 24 * 90, 24 * 120]
+        tests = [24 * 7, 24 * 10, 24 * 14]
+        horizons = [12, 36, 72]
+        subsets = ["geom_core", "geom_vol", "geom_vol_cross", "geom_vol_flow", "full_stack"]
+
+    regimes = ["all", "low_vol", "mid_vol", "high_vol"]
+    param_grid = [
+        {"turnover_cap": 0.1, "round_trip_cost_bps": 12.0},
+        {"turnover_cap": 0.15, "round_trip_cost_bps": 15.0},
+    ]
+
+    specs: list[ExperimentSpec] = []
+    for w in windows:
+        for t in tests:
+            if t >= w:
+                continue
+            for h in horizons:
+                for fs in subsets:
+                    for r in regimes:
+                        for p in param_grid:
+                            specs.append(
+                                ExperimentSpec(
+                                    window_bars=w,
+                                    test_bars=t,
+                                    horizon=h,
+                                    feature_subset=fs,
+                                    regime_slice=r,
+                                    policy_params=p,
+                                    seed=7,
+                                )
+                            )
+    return specs

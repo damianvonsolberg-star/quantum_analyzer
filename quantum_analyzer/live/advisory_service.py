@@ -75,6 +75,7 @@ def run_advisory(
     thresholds: DriftThresholds | None = None,
     *,
     allow_dev_fallback: bool = False,
+    promoted_root: str | Path | None = None,
 ) -> AdvisoryOutput:
     """Production advisory path is strictly artifact-backed.
 
@@ -83,6 +84,55 @@ def run_advisory(
     """
     thresholds = thresholds or DriftThresholds()
     loader = ArtifactLoader(artifacts_root)
+
+    # Preferred path: promoted signal bundle from explorer/promotion pipeline.
+    promoted = loader.load_promoted_signal(promoted_root)
+    if isinstance(promoted, dict) and promoted.get("action"):
+        now = datetime.now(timezone.utc)
+        action = str(promoted.get("action", "HOLD"))
+        target = float(promoted.get("target_position", 0.0) or 0.0)
+        conf = float(promoted.get("confidence", 0.0) or 0.0)
+        proposal = ActionProposal(
+            ts=now,
+            symbol="SOLUSDT",
+            action=action,
+            score=conf,
+            size_fraction=abs(target),
+            target_position=target,
+            expected_edge_bps=0.0,
+            expected_cost_bps=0.0,
+            reason=str(promoted.get("reason", "promoted_signal")),
+            advisory_mode="spot_only",
+            target_scope="advisory_sleeve",
+        )
+        forecast = ForecastBundle(ts=now, symbol="SOLUSDT", distributions={}, diagnostics={"source": "promoted_signal_bundle", "confidence": conf})
+        gov_status = "OK"
+        if isinstance(promoted.get("source"), dict):
+            gov_status = str(promoted.get("source", {}).get("governance_status", "OK"))
+        gov = {
+            "overall_status": gov_status,
+            "kill_switch_active": bool(gov_status != "OK"),
+            "kill_switch_reasons": (["governance_not_ok"] if gov_status != "OK" else []),
+            "artifact_staleness": "fresh",
+            "data_staleness": "fresh",
+            "feature_drift": 0.0,
+            "calibration_drift": 0.0,
+            "state_occupancy_drift": 0.0,
+            "action_rate_drift": 0.0,
+            "cost_drift_bps": 0.0,
+        }
+        return AdvisoryOutput(
+            forecast=forecast,
+            proposal=proposal,
+            drift={"governance": gov},
+            kill_switch=bool(gov["kill_switch_active"]),
+            kill_reason=(gov["kill_switch_reasons"][0] if gov["kill_switch_reasons"] else None),
+        )
+
+    # Batch-2 strict behavior: live advisory consumes promoted bundle only,
+    # unless explicit dev fallback is enabled.
+    if not allow_dev_fallback:
+        return _hold_output("missing_promoted_signal_bundle")
 
     try:
         bundle, bundle_dir, templates, model = loader.load_production_artifacts()

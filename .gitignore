@@ -10,6 +10,7 @@ __pycache__/
 # local runtime artifacts
 ui_data/
 doctor_report.json
+artifacts/
 
 # keep committed test fixtures
 !ui/fixtures/*.csv

@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def _normalize_action(a: str) -> str:
+    x = (a or "").upper()
+    if x in {"LONG", "BUY", "BUY SPOT"}:
+        return "BUY SPOT"
+    if x in {"REDUCE", "SELL", "REDUCE SPOT"}:
+        return "REDUCE SPOT"
+    if x in {"FLAT", "GO FLAT"}:
+        return "GO FLAT"
+    return "HOLD"
+
+
+def select_final_signal(
+    approved_candidates: list[dict[str, Any]],
+    *,
+    min_mass: float = 0.35,
+    min_margin: float = 0.10,
+) -> dict[str, Any]:
+    if not approved_candidates:
+        return {
+            "action": "HOLD",
+            "reason": "no_approved_candidates",
+            "confidence": 0.0,
+            "target_position": 0.0,
+        }
+
+    buckets: dict[str, float] = {"BUY SPOT": 0.0, "HOLD": 0.0, "REDUCE SPOT": 0.0, "GO FLAT": 0.0}
+    weighted_targets: list[tuple[float, float]] = []
+
+    for c in approved_candidates:
+        action = _normalize_action(str(c.get("action", "HOLD")))
+        w = float(c.get("vote_weight", 0.0) or 0.0)
+        buckets[action] += max(w, 0.0)
+        weighted_targets.append((float(c.get("target_position", 0.0) or 0.0), max(w, 0.0)))
+
+    total = sum(buckets.values())
+    if total <= 0:
+        return {"action": "HOLD", "reason": "zero_vote_mass", "confidence": 0.0, "target_position": 0.0}
+
+    ranked = sorted(buckets.items(), key=lambda kv: kv[1], reverse=True)
+    top_action, top_mass = ranked[0]
+    second_mass = ranked[1][1] if len(ranked) > 1 else 0.0
+
+    top_share = top_mass / total
+    margin = (top_mass - second_mass) / total
+
+    if top_share < min_mass or margin < min_margin:
+        return {
+            "action": "HOLD",
+            "reason": "weak_action_margin",
+            "confidence": float(top_share),
+            "target_position": 0.0,
+            "action_masses": {k: (v / total) for k, v in buckets.items()},
+        }
+
+    # weighted mean target among top-action members
+    num = 0.0
+    den = 0.0
+    for c in approved_candidates:
+        if _normalize_action(str(c.get("action", "HOLD"))) != top_action:
+            continue
+        w = float(c.get("vote_weight", 0.0) or 0.0)
+        num += float(c.get("target_position", 0.0) or 0.0) * w
+        den += w
+    target = (num / den) if den > 0 else 0.0
+
+    # spot-safe clipping here is explicit and reasoned
+    if top_action in {"BUY SPOT", "HOLD"}:
+        target = max(0.0, target)
+
+    return {
+        "action": top_action,
+        "reason": "promoted_cluster_consensus",
+        "confidence": float(top_share),
+        "target_position": float(target),
+        "action_masses": {k: (v / total) for k, v in buckets.items()},
+        "margin": float(margin),
+    }
