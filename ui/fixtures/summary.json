@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.1.0",
+  "bars": 1000,
+  "test_bars": 200,
+  "ending_equity": 1023400.5,
+  "return_pct": 0.0234,
+  "diagnostics": {
+    "max_drawdown": -0.041
+  }
+}

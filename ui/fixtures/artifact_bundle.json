@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.1.0",
+  "forecast": {
+    "confidence": 0.67,
+    "entropy": 0.44,
+    "distributions": {
+      "h12": {"mean": 0.001},
+      "h36": {"mean": 0.002},
+      "h72": {"mean": 0.003}
+    }
+  }
+}

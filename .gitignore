@@ -6,3 +6,11 @@ __pycache__/
 .DS_Store
 *.parquet
 *.csv
+
+# local runtime artifacts
+ui_data/
+doctor_report.json
+
+# keep committed test fixtures
+!ui/fixtures/*.csv
+!ui/fixtures/*.json

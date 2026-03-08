@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class UiForecastView:
+    horizons: list[str] = field(default_factory=list)
+    entropy: float | None = None
+    confidence: float | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UiLiveAdvice:
+    timestamp: str
+    headline_action: str
+    traffic_light: str
+    target_position: float
+    expected_edge_bps: float
+    expected_cost_bps: float
+    confidence: float | None
+    entropy: float | None
+    risk_note: str
+    reasons: list[str] = field(default_factory=list)
+
+
+@dataclass
+class UiBacktestSummary:
+    bars: int | None = None
+    test_bars: int | None = None
+    ending_equity: float | None = None
+    return_pct: float | None = None
+    max_drawdown: float | None = None
+    schema_version: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UiPathTemplate:
+    template_id: str
+    label: str | None = None
+    expectancy: float | None = None
+    support: int | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UiDriftStatus:
+    ok: bool
+    warnings: list[str] = field(default_factory=list)
+    hard_failures: list[str] = field(default_factory=list)
+    latest_timestamp: str | None = None
+    schema_versions: list[str] = field(default_factory=list)
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UiPortfolioSnapshot:
+    wallet: str
+    sol: float | None
+    usdc: float | None
+    ok: bool
+    message: str = ""
+    sol_price_usd: float | None = None
+    sol_mtm_usd: float | None = None
+    total_nav_usd: float | None = None
+    current_sol_weight: float | None = None
+    dry_powder_usd: float | None = None
+
+
+# backward-compatible aliases used in current pages
+LiveAdviceVM = UiLiveAdvice
+BacktestVM = UiBacktestSummary
+TemplatesVM = list[UiPathTemplate]
+DriftVM = UiDriftStatus

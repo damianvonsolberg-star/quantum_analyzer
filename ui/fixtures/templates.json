@@ -1,0 +1,4 @@
+[
+  {"template_id": "T1", "label": "Trend", "expectancy": 0.12, "support": 42},
+  {"template_id": "T2", "label": "MeanRev", "expectancy": 0.06, "support": 21}
+]
