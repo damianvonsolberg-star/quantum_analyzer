@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import AdapterValidationError, ArtifactAdapter
-from ui.components import artifact_banner, render_headline_card, sidebar_controls
+from ui.components import artifact_banner, render_headline_card, render_soft_card, sidebar_controls
 from ui.portfolio import advice_from_target, build_portfolio_snapshot
 from ui.recommendation import decide_recommendation
 from ui.state import init_state
@@ -22,7 +22,7 @@ from ui.wallet import WalletFetchError, fetch_solusdt_price, fetch_wallet_balanc
 st.set_page_config(page_title="Live Advice", layout="wide")
 init_state()
 sidebar_controls()
-st.title("Live Advice")
+st.title("Live Advice · Decision Desk")
 artifact_banner()
 
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])
@@ -110,21 +110,33 @@ if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None
 display_action = portfolio_advice.action_label if portfolio_advice is not None else rec.action_text
 render_headline_card(rec.light, display_action, "Simple advisory view (read-only)")
 
+st.markdown(f"**What to do now:** {display_action}. {'Proceed cautiously.' if rec.light in {'WATCH','YELLOW'} else ('Do not act until resolved.' if rec.light=='HALT' else 'Normal advisory confidence.')}")
+
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Wallet SOL", f"{(snap.sol or 0.0):.4f}")
-m2.metric("Wallet USDC", f"{(snap.usdc or 0.0):.2f}")
-m3.metric("Current NAV", f"${(snap.total_nav_usd or 0.0):,.2f}")
-m4.metric("Current SOL Allocation", f"{(snap.current_sol_weight or 0.0)*100:.2f}%")
+with m1:
+    render_soft_card("Wallet SOL", f"{(snap.sol or 0.0):,.4f}")
+with m2:
+    render_soft_card("Wallet USDC", f"{(snap.usdc or 0.0):,.2f}")
+with m3:
+    render_soft_card("Current NAV", f"${(snap.total_nav_usd or 0.0):,.2f}")
+with m4:
+    render_soft_card("Current SOL Allocation", f"{(snap.current_sol_weight or 0.0)*100:.2f}%")
 
 n1, n2, n3 = st.columns(3)
 if portfolio_advice is not None:
-    n1.metric("Recommended Delta USD (spot actionable)", f"{portfolio_advice.recommended_delta_usd:+,.2f}")
-    n2.metric("Recommended Delta SOL (spot actionable)", f"{portfolio_advice.recommended_delta_sol:+.4f}")
-    n3.metric("Spot Target Allocation", f"{portfolio_advice.post_trade_target_sol_weight*100:.2f}%")
+    with n1:
+        render_soft_card("Do this now (USD)", f"{portfolio_advice.recommended_delta_usd:+,.2f}", "Spot actionable delta")
+    with n2:
+        render_soft_card("Do this now (SOL)", f"{portfolio_advice.recommended_delta_sol:+.4f}", "Spot actionable delta")
+    with n3:
+        render_soft_card("Target spot allocation", f"{portfolio_advice.post_trade_target_sol_weight*100:.2f}%", "For selected advisory scope")
 else:
-    n1.metric("Recommended Delta USD", "n/a")
-    n2.metric("Recommended Delta SOL", "n/a")
-    n3.metric("Target Allocation", f"{ui_advice.target_position*100:.2f}%")
+    with n1:
+        render_soft_card("Do this now (USD)", "n/a")
+    with n2:
+        render_soft_card("Do this now (SOL)", "n/a")
+    with n3:
+        render_soft_card("Target spot allocation", f"{ui_advice.target_position*100:.2f}%")
 
 s1, s2, s3 = st.columns(3)
 s1.metric("Confidence", f"{(ui_advice.confidence or 0.0):.2f}")

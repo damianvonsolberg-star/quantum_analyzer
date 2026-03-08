@@ -12,15 +12,24 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import AdapterValidationError, ArtifactAdapter
-from ui.charts import action_hist_chart, compute_drawdown, drawdown_chart, equity_chart, filter_actions, infer_kpis
-from ui.components import artifact_banner, sidebar_controls
+from ui.charts import (
+    action_hist_chart,
+    compute_drawdown,
+    drawdown_chart,
+    equity_chart,
+    fetch_solusdc_price_series,
+    filter_actions,
+    infer_kpis,
+    signal_price_overlay_chart,
+)
+from ui.components import artifact_banner, render_soft_card, sidebar_controls
 from ui.state import init_state
 
 
 st.set_page_config(page_title="Backtest", layout="wide")
 init_state()
 sidebar_controls()
-st.title("Backtest")
+st.title("Backtest · Performance Lab")
 artifact_banner()
 
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])
@@ -68,14 +77,22 @@ actions_f = filter_actions(actions, start=start, end=end, action_type=action_fil
 
 # KPI cards
 k = infer_kpis(summary, actions_f, equity)
+st.markdown("**Backtest summary:** higher return/profit factor and lower drawdown are better.")
 k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
-k1.metric("Total Return", f"{(k['total_return'] or 0.0)*100:.2f}%" if k["total_return"] is not None else "n/a")
-k2.metric("Max Drawdown", f"{(k['max_drawdown'] or 0.0)*100:.2f}%" if k["max_drawdown"] is not None else "n/a")
-k3.metric("Profit Factor", f"{k['profit_factor']:.2f}" if k["profit_factor"] is not None else "n/a")
-k4.metric("Expectancy", f"{k['expectancy']:.4f}" if k["expectancy"] is not None else "n/a")
-k5.metric("Action Rate", f"{k['action_rate']:.3f}" if k["action_rate"] is not None else "n/a")
-k6.metric("Turnover", f"{k['turnover']:.3f}" if k["turnover"] is not None else "n/a")
-k7.metric("Calibration", f"{k['calibration_proxy']:.4f}" if k["calibration_proxy"] is not None else "n/a")
+with k1:
+    render_soft_card("Total Return", f"{(k['total_return'] or 0.0)*100:.2f}%" if k["total_return"] is not None else "n/a")
+with k2:
+    render_soft_card("Max Drawdown", f"{(k['max_drawdown'] or 0.0)*100:.2f}%" if k["max_drawdown"] is not None else "n/a")
+with k3:
+    render_soft_card("Profit Factor", f"{k['profit_factor']:.2f}" if k["profit_factor"] is not None else "n/a")
+with k4:
+    render_soft_card("Expectancy", f"{k['expectancy']:.4f}" if k["expectancy"] is not None else "n/a")
+with k5:
+    render_soft_card("Action Rate", f"{k['action_rate']:.3f}" if k["action_rate"] is not None else "n/a")
+with k6:
+    render_soft_card("Turnover", f"{k['turnover']:.3f}" if k["turnover"] is not None else "n/a")
+with k7:
+    render_soft_card("Calibration", f"{k['calibration_proxy']:.4f}" if k["calibration_proxy"] is not None else "n/a")
 
 # charts
 st.subheader("Equity Curve")
@@ -99,6 +116,20 @@ if ah is not None:
     st.altair_chart(ah, use_container_width=True)
 else:
     st.info("No action data available")
+
+st.subheader("Signal Overlay on SOLUSDC Price")
+price_df = pd.DataFrame()
+if not actions_f.empty and ("ts" in actions_f.columns or "timestamp" in actions_f.columns):
+    ts_col = "ts" if "ts" in actions_f.columns else "timestamp"
+    ts_vals = pd.to_datetime(actions_f[ts_col], errors="coerce", utc=True).dropna()
+    if not ts_vals.empty:
+        price_df = fetch_solusdc_price_series(ts_vals.min().isoformat(), ts_vals.max().isoformat(), interval="1h")
+
+ov = signal_price_overlay_chart(price_df, actions_f)
+if ov is not None:
+    st.altair_chart(ov, use_container_width=True)
+else:
+    st.info("Price overlay unavailable (missing actions/timestamps or Binance fetch unavailable)")
 
 st.subheader("Recent Actions")
 if not actions_f.empty:

@@ -31,9 +31,47 @@ def _resolve_default_artifact_dir(cfg: UIConfig) -> str:
     return str(candidate)
 
 
+def _ui_data_dir() -> Path:
+    p = os.getenv("UI_DATA_DIR", str((ROOT / "ui_data").resolve()))
+    d = Path(p)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _state_file() -> Path:
+    return _ui_data_dir() / "ui_state.json"
+
+
+def load_persisted_artifact_dir() -> str | None:
+    sf = _state_file()
+    if not sf.exists():
+        return None
+    try:
+        import json
+
+        data = json.loads(sf.read_text(encoding="utf-8"))
+        v = data.get("artifact_dir")
+        return str(v) if v else None
+    except Exception:
+        return None
+
+
+def persist_artifact_dir(path: str) -> None:
+    sf = _state_file()
+    try:
+        import json
+
+        payload = {"artifact_dir": path}
+        sf.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def init_state() -> None:
     cfg = UIConfig()
-    st.session_state.setdefault("artifact_dir", _resolve_default_artifact_dir(cfg))
+    persisted = load_persisted_artifact_dir()
+    default_artifacts = persisted or _resolve_default_artifact_dir(cfg)
+    st.session_state.setdefault("artifact_dir", default_artifacts)
     st.session_state.setdefault("wallet_address", cfg.default_wallet)
     st.session_state.setdefault("rpc_url", cfg.default_rpc)
     st.session_state.setdefault("refresh_seconds", cfg.default_refresh_seconds)

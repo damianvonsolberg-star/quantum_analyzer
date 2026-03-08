@@ -4,6 +4,7 @@ from typing import Any
 
 import altair as alt
 import pandas as pd
+import requests
 
 
 def compute_drawdown(equity_df: pd.DataFrame) -> pd.DataFrame:
@@ -83,19 +84,38 @@ def filter_actions(
     return out.drop(columns=[c for c in ["_ts"] if c in out.columns])
 
 
+def _chart_style(c):
+    return c.properties(height=280).configure_axis(labelFontSize=11, titleFontSize=12, gridOpacity=0.2).configure_view(strokeOpacity=0.15)
+
+
 def equity_chart(equity_df: pd.DataFrame):
     if equity_df is None or equity_df.empty or "equity" not in equity_df.columns:
         return None
     d = equity_df.copy()
     x = "ts" if "ts" in d.columns else d.columns[0]
-    return alt.Chart(d).mark_line().encode(x=x, y="equity")
+    d[x] = pd.to_datetime(d[x], errors="coerce", utc=True)
+    d = d.dropna(subset=[x])
+    c = alt.Chart(d).mark_line(strokeWidth=2.4, color="#7dd3fc").encode(
+        x=alt.X(f"{x}:T", title="Time", axis=alt.Axis(format="%b %d %H:%M", labelAngle=0)),
+        y=alt.Y("equity", title="Equity"),
+        tooltip=[alt.Tooltip(f"{x}:T", title="Time"), alt.Tooltip("equity:Q", format=",.2f")],
+    ).interactive()
+    return _chart_style(c)
 
 
 def drawdown_chart(drawdown_df: pd.DataFrame):
     if drawdown_df is None or drawdown_df.empty or "drawdown" not in drawdown_df.columns:
         return None
-    x = "ts" if "ts" in drawdown_df.columns else drawdown_df.columns[0]
-    return alt.Chart(drawdown_df).mark_area().encode(x=x, y="drawdown")
+    d = drawdown_df.copy()
+    x = "ts" if "ts" in d.columns else d.columns[0]
+    d[x] = pd.to_datetime(d[x], errors="coerce", utc=True)
+    d = d.dropna(subset=[x])
+    c = alt.Chart(d).mark_area(color="#f97316", opacity=0.35).encode(
+        x=alt.X(f"{x}:T", title="Time", axis=alt.Axis(format="%b %d %H:%M", labelAngle=0)),
+        y=alt.Y("drawdown", title="Drawdown"),
+        tooltip=[alt.Tooltip(f"{x}:T", title="Time"), alt.Tooltip("drawdown:Q", format=".4f")],
+    ).interactive()
+    return _chart_style(c)
 
 
 def action_hist_chart(actions_df: pd.DataFrame):
@@ -103,4 +123,116 @@ def action_hist_chart(actions_df: pd.DataFrame):
         return None
     d = actions_df.copy()
     counts = d.groupby("action", as_index=False).size()
-    return alt.Chart(counts).mark_bar().encode(x="action", y="size")
+    c = alt.Chart(counts).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+        x=alt.X("action", title="Action"),
+        y=alt.Y("size", title="Count"),
+        color=alt.Color("action:N", legend=None),
+    )
+    return _chart_style(c)
+
+
+def fetch_solusdc_price_series(start_ts: str, end_ts: str, interval: str = "1h") -> pd.DataFrame:
+    """Fetch SOLUSDC klines from Binance for overlay charts.
+
+    Returns empty DataFrame on network/API failures (UI should degrade gracefully).
+    """
+    try:
+        s_ms = int(pd.Timestamp(start_ts).tz_convert("UTC").timestamp() * 1000)
+        e_ms = int(pd.Timestamp(end_ts).tz_convert("UTC").timestamp() * 1000)
+    except Exception:
+        return pd.DataFrame()
+
+    url = "https://api.binance.com/api/v3/klines"
+    rows: list[list[Any]] = []
+    cursor = s_ms
+    try:
+        while cursor < e_ms:
+            r = requests.get(
+                url,
+                params={
+                    "symbol": "SOLUSDC",
+                    "interval": interval,
+                    "startTime": cursor,
+                    "endTime": e_ms,
+                    "limit": 1000,
+                },
+                timeout=10,
+            )
+            r.raise_for_status()
+            batch = r.json()
+            if not batch:
+                break
+            rows.extend(batch)
+            last_open = int(batch[-1][0])
+            if len(batch) < 1000 or last_open <= cursor:
+                break
+            cursor = last_open + 1
+    except Exception:
+        return pd.DataFrame()
+
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(rows, columns=[
+        "open_time_ms",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "close_time_ms",
+        "quote_asset_volume",
+        "n_trades",
+        "taker_buy_base",
+        "taker_buy_quote",
+        "ignore",
+    ])
+    out["ts"] = pd.to_datetime(out["open_time_ms"].astype("int64"), unit="ms", utc=True)
+    out["close"] = out["close"].astype(float)
+    return out[["ts", "close"]]
+
+
+def signal_price_overlay_chart(price_df: pd.DataFrame, actions_df: pd.DataFrame):
+    if price_df is None or price_df.empty:
+        return None
+    p0 = price_df.copy()
+    p0["ts"] = pd.to_datetime(p0["ts"], errors="coerce", utc=True)
+    p0 = p0.dropna(subset=["ts"]).sort_values("ts")
+
+    base = alt.Chart(p0).mark_line(color="#4fc3f7", strokeWidth=2.6).encode(
+        x=alt.X("ts:T", title="Time", axis=alt.Axis(format="%b %d %H:%M", labelAngle=0)),
+        y=alt.Y("close:Q", title="SOLUSDC price"),
+        tooltip=[alt.Tooltip("ts:T", title="Time"), alt.Tooltip("close:Q", title="Price", format=",.2f")],
+    )
+
+    if actions_df is None or actions_df.empty or "action" not in actions_df.columns:
+        return _chart_style(base.interactive())
+
+    d = actions_df.copy()
+    ts_col = "ts" if "ts" in d.columns else ("timestamp" if "timestamp" in d.columns else None)
+    if ts_col is None:
+        return _chart_style(base.interactive())
+    d["ts"] = pd.to_datetime(d[ts_col], errors="coerce", utc=True)
+    d = d.dropna(subset=["ts"]).copy()
+    if d.empty:
+        return _chart_style(base.interactive())
+
+    # align nearest price for markers
+    p = p0.set_index("ts").sort_index()
+    d = d.sort_values("ts")
+    d["close"] = p["close"].reindex(d["ts"], method="nearest").values
+    d["size"] = d["action"].astype(str).str.upper().map({"SHORT": 260, "SELL": 260, "REDUCE": 220, "LONG": 160, "BUY": 160, "HOLD": 130, "GO FLAT": 220}).fillna(150)
+
+    color = alt.Color("action:N", scale=alt.Scale(domain=["BUY", "LONG", "HOLD", "REDUCE", "SELL", "SHORT", "GO FLAT"], range=["#66bb6a", "#7cb342", "#fdd835", "#ff7043", "#ef5350", "#e53935", "#ab47bc"]))
+    shape = alt.Shape("action:N", scale=alt.Scale(domain=["BUY", "LONG", "HOLD", "REDUCE", "SELL", "SHORT", "GO FLAT"], range=["circle", "triangle-up", "circle", "triangle-down", "diamond", "cross", "square"]))
+
+    pts = alt.Chart(d).mark_point(filled=True, opacity=0.95).encode(
+        x="ts:T",
+        y="close:Q",
+        color=color,
+        shape=shape,
+        size=alt.Size("size:Q", legend=None),
+        tooltip=[alt.Tooltip("ts:T", title="Time"), alt.Tooltip("action:N", title="Action"), alt.Tooltip("close:Q", title="Price", format=",.2f")],
+    )
+
+    return _chart_style((base + pts).interactive())

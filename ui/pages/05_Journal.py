@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import AdapterValidationError, ArtifactAdapter
-from ui.components import artifact_banner, sidebar_controls
+from ui.components import artifact_banner, render_soft_card, sidebar_controls
 from ui.journal import compute_position, load_exec_log, load_fills, mark_executed_advice, record_fill, reconcile_wallet, resolve_data_dir
 from ui.state import init_state
 from ui.wallet import fetch_solusdt_price
@@ -20,7 +20,7 @@ from ui.wallet import fetch_solusdt_price
 st.set_page_config(page_title="Journal", layout="wide")
 init_state()
 sidebar_controls()
-st.title("Manual Execution Journal")
+st.title("Manual Execution Journal · Audit Trail")
 st.caption("Advisory-only tracker. No signing, no order execution.")
 artifact_banner()
 
@@ -104,11 +104,16 @@ position = compute_position(fills, current_price=px)
 
 st.subheader("Tactical lot snapshot")
 m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric("Net qty", f"{position.net_qty:.4f}")
-m2.metric("Avg entry", f"{position.avg_entry:.4f}")
-m3.metric("Realized PnL", f"{position.realized_pnl:+.2f}")
-m4.metric("Unrealized PnL", f"{position.unrealized_pnl:+.2f}")
-m5.metric("Market value", f"{position.market_value:+.2f}")
+with m1:
+    render_soft_card("Net qty", f"{position.net_qty:.4f}")
+with m2:
+    render_soft_card("Avg entry", f"{position.avg_entry:.4f}")
+with m3:
+    render_soft_card("Realized PnL", f"{position.realized_pnl:+.2f}")
+with m4:
+    render_soft_card("Unrealized PnL", f"{position.unrealized_pnl:+.2f}")
+with m5:
+    render_soft_card("Market value", f"{position.market_value:+.2f}")
 
 wallet_sol = None
 ws = st.session_state.get("wallet_snapshot")

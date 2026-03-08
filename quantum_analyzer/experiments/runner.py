@@ -8,7 +8,9 @@ import pandas as pd
 
 from quantum_analyzer.backtest.engine import BacktestConfig, run_backtest
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig
-from quantum_analyzer.paths.archetypes import PathTemplate
+import json
+
+from quantum_analyzer.paths.archetypes import PathTemplate, save_templates_json
 
 from .scoring import score_result
 from .specs import ExperimentSpec
@@ -55,6 +57,30 @@ def run_experiments(
             )
 
             r = run_backtest(f, c, templates, wf, bt, out_dir=exp_dir)
+
+            # Ensure doctor-compatible artifacts in each experiment dir.
+            # 1) persist templates for experiment-level doctor checks
+            save_templates_json(templates, exp_dir / "templates.json")
+
+            # 2) inject coverage diagnostics into artifact bundle v2 when available
+            bundle_path = exp_dir / "artifact_bundle.json"
+            if bundle_path.exists():
+                bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+                cov = {
+                    "agg_trades": float(f["coverage_agg_trades"].iloc[-1]) if "coverage_agg_trades" in f.columns else 1.0,
+                    "book_ticker": float(f["coverage_book_ticker"].iloc[-1]) if "coverage_book_ticker" in f.columns else 1.0,
+                    "open_interest": float(f["coverage_open_interest"].iloc[-1]) if "coverage_open_interest" in f.columns else 1.0,
+                    "basis": float(f["coverage_basis"].iloc[-1]) if "coverage_basis" in f.columns else 1.0,
+                }
+                bundle["coverage"] = cov
+                bundle_path.write_text(json.dumps(bundle, indent=2, default=str), encoding="utf-8")
+
+                # also write explicit source_coverage.json for doctor precedence
+                (exp_dir / "source_coverage.json").write_text(
+                    json.dumps({"coverage": cov}, indent=2),
+                    encoding="utf-8",
+                )
+
             sb = score_result(r.summary, r.diagnostics.to_dict())
 
             rows.append(

@@ -46,11 +46,10 @@ def decide_recommendation(
 ) -> RecommendationView:
     stale = is_stale(advice.timestamp, now=now)
 
-    required_invalid = (
-        advice.headline_action == ""
-        or advice.confidence is None
-        or advice.entropy is None
-    )
+    # Minimal required fields for actionable recommendation.
+    # confidence/entropy may be absent for some artifact-backed promoted paths,
+    # and should not force HALT when governance is otherwise OK/WATCH.
+    required_invalid = (advice.headline_action == "")
 
     status = (drift.governance_status or ("OK" if drift.ok else "HALT")).upper()
 

@@ -10,14 +10,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import ArtifactAdapter
-from ui.components import artifact_banner, render_headline_card, sidebar_controls
+from ui.components import artifact_banner, render_headline_card, render_soft_card, sidebar_controls
 from ui.state import init_state
 
 
 st.set_page_config(page_title="Drift & Governance", layout="wide")
 init_state()
 sidebar_controls()
-st.title("Drift & Governance")
+st.title("Drift & Governance · Trust Monitor")
 st.caption("Should we trust the model right now?")
 artifact_banner()
 
@@ -28,20 +28,29 @@ status = (vm.governance_status or ("OK" if vm.ok else "HALT")).upper()
 
 response = "continue advisory" if status == "OK" else ("reduce trust" if status == "WATCH" else "halt usage")
 render_headline_card(status, "Governance Status", response)
+st.markdown(f"**What to do now:** {response.upper()}.")
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Artifact Staleness", str(gov.get("artifact_staleness", "unknown")))
-c2.metric("Data Staleness", str(gov.get("data_staleness", "unknown")))
-c3.metric("Operator Response", response.upper())
+with c1:
+    render_soft_card("Artifact Staleness", str(gov.get("artifact_staleness", "unknown")))
+with c2:
+    render_soft_card("Data Staleness", str(gov.get("data_staleness", "unknown")))
+with c3:
+    render_soft_card("Operator Response", response.upper())
 
 d1, d2, d3 = st.columns(3)
-d1.metric("Feature Drift", f"{float(gov.get('feature_drift', 0.0)):.4f}")
-d2.metric("Calibration Drift", f"{float(gov.get('calibration_drift', 0.0)):.4f}")
-d3.metric("State Occupancy Drift", f"{float(gov.get('state_occupancy_drift', 0.0)):.4f}")
+with d1:
+    render_soft_card("Feature Drift", f"{float(gov.get('feature_drift', 0.0)):.4f}")
+with d2:
+    render_soft_card("Calibration Drift", f"{float(gov.get('calibration_drift', 0.0)):.4f}")
+with d3:
+    render_soft_card("State Occupancy Drift", f"{float(gov.get('state_occupancy_drift', 0.0)):.4f}")
 
 x1, x2 = st.columns(2)
-x1.metric("Action-Rate Drift", f"{float(gov.get('action_rate_drift', 0.0)):.4f}")
-x2.metric("Cost Drift (bps)", f"{float(gov.get('cost_drift_bps', 0.0)):.4f}")
+with x1:
+    render_soft_card("Action-Rate Drift", f"{float(gov.get('action_rate_drift', 0.0)):.4f}")
+with x2:
+    render_soft_card("Cost Drift (bps)", f"{float(gov.get('cost_drift_bps', 0.0)):.4f}")
 
 reasons = gov.get("kill_switch_reasons", []) if isinstance(gov.get("kill_switch_reasons"), list) else vm.hard_failures
 st.subheader("Kill-switch reasons")

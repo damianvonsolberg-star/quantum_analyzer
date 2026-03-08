@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import ArtifactAdapter
-from ui.components import artifact_banner, sidebar_controls
+from ui.components import artifact_banner, render_soft_card, sidebar_controls
 from ui.state import init_state
 from ui.templates_view import apply_template_filters, build_why_now, templates_to_view_df
 
@@ -19,7 +19,7 @@ from ui.templates_view import apply_template_filters, build_why_now, templates_t
 st.set_page_config(page_title="Templates", layout="wide")
 init_state()
 sidebar_controls()
-st.title("Templates")
+st.title("Templates · Regime Lens")
 st.caption("Which historical path archetypes does the market currently resemble?")
 artifact_banner()
 
@@ -81,6 +81,7 @@ else:
         st.success(
             f"Model tone now: **{tone.upper()}** — Dominant template is **{best['label']}** (similarity {best['similarity']:.2f}, robustness {best['robustness']:.2f})."
         )
+        st.markdown(f"**What to do now:** Follow **{str(best['preferred_action']).upper()}** bias with horizon **{best['preferred_horizon']}**, while keeping risk controls active.")
 
 bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
 context_features = {}
@@ -92,13 +93,18 @@ elif isinstance(bundle.get("features"), dict):
 why = build_why_now(context_features, filtered if not filtered.empty else view_df)
 st.subheader("Why now?")
 w1, w2, w3 = st.columns(3)
-w1.metric("Micro range position", why["micro_range_position"])
-w2.metric("Meso range position", why["meso_range_position"])
-w3.metric("Macro range position", why["macro_range_position"])
+with w1:
+    render_soft_card("Micro range position", str(why["micro_range_position"]))
+with w2:
+    render_soft_card("Meso range position", str(why["meso_range_position"]))
+with w3:
+    render_soft_card("Macro range position", str(why["macro_range_position"]))
 
 x1, x2 = st.columns(2)
-x1.metric("Current volatility state", why["current_volatility_state"])
-x2.metric("Dominant template family", why["dominant_template_family"])
+with x1:
+    render_soft_card("Current volatility state", str(why["current_volatility_state"]))
+with x2:
+    render_soft_card("Dominant template family", str(why["dominant_template_family"]))
 st.caption(f"Cross-asset context: {why['cross_asset_context']}")
 
 with st.expander("Advanced template details"):

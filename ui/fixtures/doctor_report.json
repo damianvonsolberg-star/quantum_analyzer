@@ -1,5 +1,5 @@
 {
-  "artifact_dir": "ui/fixtures",
+  "artifact_dir": "/Users/damian/.openclaw/workspace/quantum_analyzer/ui/fixtures",
   "checks": [
     {
       "name": "artifact_bundle.json",
@@ -61,10 +61,18 @@
       "action_rate": 0.115,
       "turnover": 0.29,
       "calibration_proxy": 0.032
+    },
+    "coverage": {
+      "agg_trades": 0.95,
+      "book_ticker": 0.95,
+      "open_interest": 0.95,
+      "basis": 0.95
     }
   },
   "missing_files": [],
   "warnings": [],
-  "hard_failures": [],
-  "ok": true
+  "hard_failures": [
+    "artifact_bundle.json schema_version mismatch: '1.1.0' != 2.0.0"
+  ],
+  "ok": false
 }
