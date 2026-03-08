@@ -16,7 +16,15 @@ from ui.portfolio import advice_from_target, build_portfolio_snapshot
 from ui.recommendation import decide_recommendation
 from ui.state import init_state
 from ui.view_models import UiPortfolioSnapshot
-from ui.wallet import WalletFetchError, fetch_solusdt_price, fetch_wallet_balances, resolve_rpc_url, resolve_wallet
+from ui.wallet import (
+    WalletFetchError,
+    fetch_sol_price_helius,
+    fetch_solusdt_24h_change_pct,
+    fetch_solusdt_price,
+    fetch_wallet_balances,
+    resolve_rpc_url,
+    resolve_wallet,
+)
 
 
 st.set_page_config(page_title="Live Advice", layout="wide")
@@ -35,6 +43,25 @@ except AdapterValidationError as e:
     st.error(f"Invalid/missing artifact data: {e}")
     st.stop()
 
+def _fetch_live_price_helius(rpc_url: str) -> tuple[float, float | None]:
+    try:
+        px, chg24 = fetch_sol_price_helius(rpc_url=rpc_url)
+        if chg24 is None:
+            try:
+                chg24 = fetch_solusdt_24h_change_pct()
+            except WalletFetchError:
+                chg24 = None
+        return float(px), (float(chg24) if chg24 is not None else None)
+    except WalletFetchError:
+        # fallback only when Helius price endpoint is unavailable
+        px = float(fetch_solusdt_price())
+        try:
+            chg24 = float(fetch_solusdt_24h_change_pct())
+        except WalletFetchError:
+            chg24 = None
+        return px, chg24
+
+
 def _refresh_wallet_snapshot() -> None:
     rpc_url = resolve_rpc_url(st.session_state.get("rpc_url"))
     wallet = resolve_wallet(st.session_state.get("wallet_address"))
@@ -49,7 +76,8 @@ def _refresh_wallet_snapshot() -> None:
         return
 
     bal = fetch_wallet_balances(rpc_url=rpc_url, wallet=wallet)
-    px = fetch_solusdt_price()
+    px, chg24 = _fetch_live_price_helius(rpc_url)
+    st.session_state["sol_24h_change_pct"] = chg24
     snap = build_portfolio_snapshot(bal, px)
     st.session_state["wallet_snapshot"] = UiPortfolioSnapshot(
         wallet=snap.wallet,
@@ -80,9 +108,44 @@ if "wallet_snapshot" not in st.session_state:
     except WalletFetchError as e:
         st.session_state["wallet_snapshot"] = UiPortfolioSnapshot(wallet="", sol=None, usdc=None, ok=False, message=str(e))
 
+# lightweight live ticker loop (price every few seconds)
+auto_secs = st.session_state.get("live_ticker_seconds", 5)
+if hasattr(st, "autorefresh"):
+    st.autorefresh(interval=int(auto_secs * 1000), key="live_ticker_autorefresh")
+
+try:
+    rpc_url_live = resolve_rpc_url(st.session_state.get("rpc_url"))
+    px_live, chg24_live = _fetch_live_price_helius(rpc_url_live)
+    st.session_state["sol_24h_change_pct"] = chg24_live
+    ws = st.session_state.get("wallet_snapshot")
+    if isinstance(ws, UiPortfolioSnapshot):
+        ws.sol_price_usd = float(px_live)
+        if ws.sol is not None:
+            ws.sol_mtm_usd = float(ws.sol) * float(px_live)
+        if ws.usdc is not None and ws.sol_mtm_usd is not None:
+            ws.total_nav_usd = float(ws.usdc) + float(ws.sol_mtm_usd)
+            if ws.total_nav_usd > 0:
+                ws.current_sol_weight = float(ws.sol_mtm_usd) / float(ws.total_nav_usd)
+        st.session_state["wallet_snapshot"] = ws
+        st.session_state["last_live_refresh_ts"] = datetime.now(timezone.utc).isoformat()
+except Exception:
+    pass
+
 snap = st.session_state.get("wallet_snapshot")
 if not isinstance(snap, UiPortfolioSnapshot):
     snap = UiPortfolioSnapshot(wallet="", sol=0.0, usdc=0.0, ok=False, message="Wallet not refreshed yet", sol_price_usd=None, total_nav_usd=None, current_sol_weight=0.0, dry_powder_usd=0.0)
+
+# Lightweight live ticker context
+curr_px = float(snap.sol_price_usd) if snap.sol_price_usd is not None else None
+prev_px = st.session_state.get("_prev_sol_price_usd")
+if curr_px is not None:
+    st.session_state["_prev_sol_price_usd"] = curr_px
+
+px_delta = None
+px_delta_pct = None
+if curr_px is not None and isinstance(prev_px, (int, float)) and prev_px > 0:
+    px_delta = curr_px - float(prev_px)
+    px_delta_pct = (px_delta / float(prev_px)) * 100.0
 
 rec = decide_recommendation(ui_advice, snap, drift)
 
@@ -108,9 +171,34 @@ if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None
     )
 
 display_action = portfolio_advice.action_label if portfolio_advice is not None else rec.action_text
-render_headline_card(rec.light, display_action, "Simple advisory view (read-only)")
 
-st.markdown(f"**What to do now:** {display_action}. {'Proceed cautiously.' if rec.light in {'WATCH','YELLOW'} else ('Do not act until resolved.' if rec.light=='HALT' else 'Normal advisory confidence.')}")
+h1, h2 = st.columns([3.2, 1.8])
+with h1:
+    render_headline_card(rec.light, display_action, "Simple advisory view (read-only)")
+with h2:
+    chg24 = st.session_state.get("sol_24h_change_pct")
+    if curr_px is None:
+        render_soft_card("SOL Live Ticker", "n/a", "Price unavailable")
+    else:
+        up = (chg24 is not None and float(chg24) >= 0)
+        arrow = "▲" if up else "▼"
+        col = "#66bb6a" if up else "#ef5350"
+        sub = "24h change unavailable"
+        if chg24 is not None:
+            sub = f"{arrow} {float(chg24):+.2f}% (24h)"
+        st.markdown(
+            f"""
+            <div class='qa-card' style='padding:12px 14px;'>
+              <div class='qa-title'>SOL LIVE TICKER</div>
+              <div class='qa-value'>${curr_px:,.2f}</div>
+              <div class='qa-sub' style='color:{col};font-weight:700'>{sub}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+st.markdown(f"**What to do now:** {display_action}. {'Proceed cautiously.' if rec.light in {'WATCH','YELLOW'} else ('Do not act until resolved.' if rec.light=='HALT' else 'Normal advisory confidence.')}  ")
+st.caption("Ticker refreshes automatically every few seconds via Helius pricing.")
 
 m1, m2, m3, m4 = st.columns(4)
 with m1:
