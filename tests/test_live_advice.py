@@ -45,10 +45,10 @@ def test_halt_on_drift_failure():
     assert rec.light == "HALT"
 
 
-def test_halt_on_stale_artifact():
+def test_watch_on_stale_artifact():
     old_ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
     rec = decide_recommendation(_base_advice(timestamp=old_ts), _base_portfolio(), _base_drift())
-    assert rec.light == "HALT"
+    assert rec.light == "WATCH"
 
 
 def test_green_when_target_above_current_and_quality_good():

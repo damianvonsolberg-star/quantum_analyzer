@@ -1,4 +1,41 @@
 [
-  {"template_id": "T1", "label": "Trend", "expectancy": 0.12, "support": 42},
-  {"template_id": "T2", "label": "MeanRev", "expectancy": 0.06, "support": 21}
+  {
+    "template_id": "T1",
+    "label": "Trend Continuation",
+    "description": "Momentum continuation after pullback",
+    "sample_count": 64,
+    "expectancy": 0.14,
+    "pf_proxy": 1.35,
+    "oos_robustness": 0.77,
+    "preferred_action": "BUY",
+    "preferred_horizon": "h36",
+    "similarity": 0.82,
+    "family": "trend"
+  },
+  {
+    "template_id": "T2",
+    "label": "Range Chop",
+    "description": "Sideways mean-reversion regime",
+    "sample_count": 88,
+    "expectancy": 0.05,
+    "pf_proxy": 1.08,
+    "oos_robustness": 0.62,
+    "preferred_action": "HOLD",
+    "preferred_horizon": "h12",
+    "similarity": 0.56,
+    "family": "mean_revert"
+  },
+  {
+    "template_id": "T3",
+    "label": "Risk-Off Flush",
+    "description": "Downside impulse with high vol",
+    "sample_count": 41,
+    "expectancy": -0.09,
+    "pf_proxy": 0.84,
+    "oos_robustness": 0.69,
+    "preferred_action": "REDUCE",
+    "preferred_horizon": "h12",
+    "similarity": 0.44,
+    "family": "risk_off"
+  }
 ]

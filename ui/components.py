@@ -63,6 +63,7 @@ def maybe_templates_df(artifacts: dict[str, object]) -> pd.DataFrame:
 def render_headline_card(light: str, action_text: str, subtitle: str = "") -> None:
     colors = {
         "HALT": "#9e9e9e",
+        "WATCH": "#fb8c00",
         "RED": "#e53935",
         "YELLOW": "#fdd835",
         "GREEN": "#43a047",

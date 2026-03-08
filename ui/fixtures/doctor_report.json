@@ -1,7 +1,70 @@
 {
-  "ok": true,
-  "schema_versions": ["1.1.0"],
-  "latest_timestamp": "2026-03-08T07:00:00Z",
+  "artifact_dir": "/Users/damian/.openclaw/workspace/quantum_analyzer/ui/fixtures",
+  "checks": [
+    {
+      "name": "artifact_bundle.json",
+      "present": true,
+      "status": "pass",
+      "message": ""
+    },
+    {
+      "name": "summary.json",
+      "present": true,
+      "status": "pass",
+      "message": ""
+    },
+    {
+      "name": "equity_curve.csv",
+      "present": true,
+      "status": "pass",
+      "message": ""
+    },
+    {
+      "name": "actions.csv",
+      "present": true,
+      "status": "pass",
+      "message": ""
+    },
+    {
+      "name": "templates",
+      "present": true,
+      "status": "pass",
+      "message": ""
+    }
+  ],
+  "schema_versions": [
+    "1.1.0"
+  ],
+  "latest_timestamp": "2026-03-08T13:57:08+00:00",
+  "latest_proposal_action": {
+    "action": "HOLD",
+    "target_position": 0.28,
+    "expected_edge_bps": 8.1,
+    "expected_cost_bps": 7.8,
+    "reason": "fresh fixture advisory",
+    "ts": "2026-03-08T13:57:08Z"
+  },
+  "latest_forecast_horizons": [
+    "h12",
+    "h36",
+    "h72"
+  ],
+  "latest_backtest_metrics": {
+    "ending_equity": 1031200.0,
+    "return_pct": 0.0312,
+    "bars": 1200,
+    "test_bars": 240,
+    "diagnostics": {
+      "max_drawdown": -0.038,
+      "profit_factor": 1.28,
+      "expectancy": 0.00042,
+      "action_rate": 0.115,
+      "turnover": 0.29,
+      "calibration_proxy": 0.032
+    }
+  },
+  "missing_files": [],
   "warnings": [],
-  "hard_failures": []
+  "hard_failures": [],
+  "ok": true
 }

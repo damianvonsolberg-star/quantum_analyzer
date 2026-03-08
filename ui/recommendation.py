@@ -52,10 +52,8 @@ def decide_recommendation(
         or advice.entropy is None
     )
 
-    if (not drift.ok) or drift.hard_failures or stale or required_invalid:
+    if (not drift.ok) or drift.hard_failures or required_invalid:
         risks = list(drift.hard_failures[:3])
-        if stale:
-            risks.append("Artifacts are stale")
         if required_invalid:
             risks.append("Missing required advice fields")
         return RecommendationView(
@@ -66,6 +64,17 @@ def decide_recommendation(
             top_risks=risks[:3],
             what_changes_light="Refresh artifacts/live data and clear kill-switch or drift failures.",
             stale=stale,
+        )
+
+    if stale:
+        return RecommendationView(
+            light="WATCH",
+            action_text="HOLD / WAIT",
+            tail_risk_note=advice.risk_note or "Artifacts are stale.",
+            top_reasons=advice.reasons[:3] or ["Artifact timestamp is old"],
+            top_risks=["Artifacts are stale", "Signal may lag current market", "Use reduced trust"],
+            what_changes_light="Load fresh artifacts / rerun latest advisory export.",
+            stale=True,
         )
 
     current_w = float(portfolio.current_sol_weight) if portfolio and portfolio.current_sol_weight is not None else 0.0

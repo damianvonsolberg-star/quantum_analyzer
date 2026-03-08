@@ -1,12 +1,33 @@
 {
   "schema_version": "1.1.0",
   "forecast": {
-    "confidence": 0.67,
-    "entropy": 0.44,
+    "confidence": 0.64,
+    "entropy": 0.41,
     "distributions": {
-      "h12": {"mean": 0.001},
-      "h36": {"mean": 0.002},
-      "h72": {"mean": 0.003}
+      "h12": {
+        "mean": 0.0008
+      },
+      "h36": {
+        "mean": 0.0015
+      },
+      "h72": {
+        "mean": 0.0022
+      }
     }
+  },
+  "current_context": {
+    "micro_range_position": "mid-high",
+    "meso_range_position": "mid",
+    "macro_range_position": "lower-mid",
+    "vol_state": "normal",
+    "cross_asset_context": "BTC neutral/supportive"
+  },
+  "drift": {
+    "latest_live_timestamp": "2026-03-08T13:57:08+00:00",
+    "feature_psi": 0.08,
+    "calibration_drift": 0.03,
+    "state_occupancy_drift": 0.06,
+    "action_rate_drift": 0.04,
+    "cost_drift": 4.5
   }
 }

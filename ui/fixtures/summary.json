@@ -1,10 +1,15 @@
 {
   "schema_version": "1.1.0",
-  "bars": 1000,
-  "test_bars": 200,
-  "ending_equity": 1023400.5,
-  "return_pct": 0.0234,
+  "bars": 1200,
+  "test_bars": 240,
+  "ending_equity": 1031200.0,
+  "return_pct": 0.0312,
   "diagnostics": {
-    "max_drawdown": -0.041
+    "max_drawdown": -0.038,
+    "profit_factor": 1.28,
+    "expectancy": 0.00042,
+    "action_rate": 0.115,
+    "turnover": 0.29,
+    "calibration_proxy": 0.032
   }
 }
