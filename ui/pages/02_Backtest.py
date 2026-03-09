@@ -43,11 +43,34 @@ templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFram
 
 artifact_ts = None
 if isinstance(bundle.get("artifact_meta"), dict):
-    artifact_ts = bundle.get("artifact_meta", {}).get("latest_timestamp") or bundle.get("artifact_meta", {}).get("produced_at")
+    artifact_ts = bundle.get("artifact_meta", {}).get("produced_at") or bundle.get("artifact_meta", {}).get("latest_timestamp")
 if artifact_ts:
     st.caption(f"🕒 Artifact timestamp: {artifact_ts}")
 else:
     st.caption("🕒 Artifact timestamp: not available")
+
+
+def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:
+    if df is None or df.empty or ts_col not in df.columns:
+        return df
+    out = df.copy()
+    s = out[ts_col]
+    # If ts is numeric bar-index style (small integers), create synthetic hourly timeline ending at artifact time.
+    if pd.api.types.is_numeric_dtype(s):
+        s_num = pd.to_numeric(s, errors="coerce")
+        if s_num.notna().any() and float(s_num.max()) < 10_000_000_000:  # not epoch ms/us/ns
+            try:
+                end_ts = pd.to_datetime(artifact_ts, utc=True, errors="coerce") if artifact_ts else pd.Timestamp.utcnow().tz_localize("UTC")
+            except Exception:
+                end_ts = pd.Timestamp.utcnow().tz_localize("UTC")
+            n = len(out)
+            out[ts_col] = pd.date_range(end=end_ts, periods=n, freq="h", tz="UTC")
+            return out
+    return out
+
+
+equity = _normalize_ts(equity, "ts")
+actions = _normalize_ts(actions, "ts")
 
 # filters
 f1, f2, f3, f4 = st.columns(4)
