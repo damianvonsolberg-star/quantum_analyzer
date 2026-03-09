@@ -311,7 +311,8 @@ def _freshness_badge(ts_str: str | None, label: str) -> str:
 
 
 l1, l2 = st.columns(2)
-artifact_ts = ui_advice.timestamp
+# Freshness should track artifact production/governance timestamp first.
+artifact_ts = drift.latest_timestamp or ui_advice.timestamp
 live_ts = st.session_state.get('last_live_refresh_ts', None)
 l1.caption(_freshness_badge(artifact_ts, "Artifact timestamp"))
 l2.caption(_freshness_badge(live_ts, "Live wallet/price refresh"))

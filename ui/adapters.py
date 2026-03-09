@@ -364,11 +364,14 @@ class ArtifactAdapter:
         status = str(governance.get("overall_status", "OK")).upper()
         reasons = governance.get("kill_switch_reasons", []) if isinstance(governance.get("kill_switch_reasons"), list) else []
 
+        artifact_meta = (bundle.get("artifact_meta", {}) or {}) if isinstance(bundle.get("artifact_meta"), dict) else {}
+        latest_ts = artifact_meta.get("produced_at") or artifact_meta.get("latest_timestamp") or doctor.get("latest_timestamp")
+
         return UiDriftStatus(
             ok=(status == "OK" and not bool(governance.get("kill_switch_active", False))),
             warnings=[] if status == "OK" else [f"governance_status={status}"],
             hard_failures=reasons,
-            latest_timestamp=(bundle.get("artifact_meta", {}) or {}).get("latest_timestamp") if isinstance(bundle.get("artifact_meta"), dict) else doctor.get("latest_timestamp"),
+            latest_timestamp=latest_ts,
             schema_versions=self.schema_versions(),
             governance_status=status,
             governance_payload=governance,
