@@ -43,7 +43,9 @@ class ArtifactAdapter:
 
     def required_missing(self) -> list[str]:
         p = self.paths()
-        required = {"bundle", "summary", "equity", "actions"}
+        # Keep core-load requirements minimal for Live/Drift pages.
+        # Backtest page can still render partial views when equity/actions are absent.
+        required = {"bundle", "summary"}
         return [k for k in required if not p[k].exists()]
 
     @staticmethod
