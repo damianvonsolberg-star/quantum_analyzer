@@ -121,6 +121,21 @@ def run_research_cycle(config: str = "config/research/solusdc_research.json", di
                 "critical": True,
             },
             {
+                "name": "evaluate_release_candidate",
+                "cmd": [
+                    "python3",
+                    "scripts/evaluate_release_candidate.py",
+                    "--explorer-root",
+                    "artifacts/explorer",
+                    "--discovery-root",
+                    "artifacts/discovery",
+                    "--promoted-root",
+                    "artifacts/promoted",
+                ],
+                "timeout": 120,
+                "critical": True,
+            },
+            {
                 "name": "emit_advisory",
                 "cmd": ["python3", "scripts/emit_advisory.py", "--artifacts-root", "artifacts/promoted"],
                 "timeout": 60,

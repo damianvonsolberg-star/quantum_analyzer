@@ -140,10 +140,8 @@ def promote_from_leaderboard(
 
         if "target_position" in g.columns:
             tp = _weighted_median(g["target_position"], weights)
-        elif "return_pct" in g.columns:
-            sign = 1.0 if float(g["return_pct"].mean()) > 0 else 0.0
-            tp = _weighted_median(pd.Series([0.35 * sign] * len(g), index=g.index), weights)
         else:
+            # Do not synthesize target from sign(return); require measured target evidence.
             tp = 0.0
 
         d.update(
@@ -213,12 +211,17 @@ def promote_from_leaderboard(
     explain = explain_decision(decision, ranked_rows)
 
     top = ranked_rows[0] if ranked_rows else {}
-    reasons = build_invalidation_reasons(
-        entropy=float(top.get("entropy", top.get("entropy_quality", 0.5)) or 0.5),
-        governance_status=governance_status,
-        edge_bps=float(top.get("expectancy", 0.0) or 0.0) * 10_000.0,
-        cost_bps=float(top.get("expected_cost_bps", top.get("cost_drift_bps", 8.0)) or 8.0),
-    )
+    ent = top.get("entropy", top.get("entropy_quality", None))
+    cost = top.get("expected_cost_bps", top.get("cost_drift_bps", None))
+    if ent is None or cost is None:
+        reasons = ["invalidation_unavailable_measured_entropy_or_cost_missing"]
+    else:
+        reasons = build_invalidation_reasons(
+            entropy=float(ent),
+            governance_status=governance_status,
+            edge_bps=float(top.get("expectancy", 0.0) or 0.0) * 10_000.0,
+            cost_bps=float(cost),
+        )
     # include cluster invalidation notes from winner
     if ranked_rows:
         reasons = sorted(set(reasons + list(ranked_rows[0].get("invalidation_notes", []))))

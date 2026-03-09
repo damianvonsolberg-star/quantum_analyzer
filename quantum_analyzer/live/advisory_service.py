@@ -98,7 +98,7 @@ def run_advisory(
         supporting = promoted.get("supporting_metrics", {}) if isinstance(promoted.get("supporting_metrics"), dict) else {}
         expected_edge = float(supporting.get("expectancy", supporting.get("expected_edge_bps", 0.0)) or 0.0)
         expected_cost = supporting.get("expected_cost_bps", None)
-        expected_cost_bps = float(expected_cost) if expected_cost is not None else 15.0
+        expected_cost_bps = float(expected_cost) if expected_cost is not None else float("nan")
 
         proposal = ActionProposal(
             ts=now,

@@ -334,9 +334,9 @@ def run_backtest(
                         "reason": str(latest_action.get("reason", "")),
                     },
                     "drift": {
-                        "governance_status": "OK",
+                        "governance_status": "BACKTEST_ONLY",
                         "kill_switch": False,
-                        "kill_switch_reasons": [],
+                        "kill_switch_reasons": ["backtest_context_not_live_governance"],
                         "timestamps": {"as_of": latest_ts},
                     },
                     "summary": summary,

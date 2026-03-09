@@ -30,6 +30,25 @@ class ArtifactAdapter:
     def __init__(self, artifact_dir: str) -> None:
         self.base = Path(artifact_dir)
 
+    def _project_root(self) -> Path:
+        p = self.base.resolve()
+        for cand in [p, *p.parents]:
+            if (cand / "ui").exists() and (cand / "quantum_analyzer").exists():
+                return cand
+        return Path.cwd()
+
+    def _final_advisory_json(self) -> dict[str, Any] | None:
+        # Only prefer canonical advisory for live operator artifact roots,
+        # not arbitrary temp fixture dirs used in tests.
+        base_s = str(self.base.resolve())
+        if "/artifacts/explorer/experiments/" not in base_s:
+            return None
+        p = self._project_root() / "artifacts" / "promoted" / "advisory_latest.json"
+        if not p.exists():
+            return None
+        raw = self._read_json(p)
+        return raw if isinstance(raw, dict) else None
+
     def paths(self) -> dict[str, Path]:
         return {
             "bundle": self.base / "artifact_bundle.json",
@@ -185,6 +204,48 @@ class ArtifactAdapter:
         )
 
     def to_live_advice(self) -> UiLiveAdvice:
+        final_adv = self._final_advisory_json()
+        if isinstance(final_adv, dict) and final_adv.get("action"):
+            action = str(final_adv.get("action", "WAIT"))
+            conf_raw = final_adv.get("confidence", None)
+            conf = float(conf_raw) if isinstance(conf_raw, (float, int)) else None
+            edge_raw = final_adv.get("expected_edge_bps", final_adv.get("expectancy", None))
+            edge = float(edge_raw) if isinstance(edge_raw, (float, int)) else 0.0
+            cost_raw = final_adv.get("expected_cost_bps", None)
+            cost = float(cost_raw) if isinstance(cost_raw, (float, int)) else 0.0
+            ts = str(final_adv.get("timestamp") or final_adv.get("updated_at") or "")
+            if not ts:
+                ts = pd.Timestamp.utcnow().isoformat()
+            reasons = []
+            if isinstance(final_adv.get("selection_reasons"), list):
+                reasons = [str(x) for x in final_adv.get("selection_reasons", [])]
+            elif isinstance(final_adv.get("reason"), str) and final_adv.get("reason"):
+                reasons = [str(final_adv.get("reason"))]
+
+            if action in {"WAIT", "HOLD"}:
+                traffic = "red"
+            elif edge > cost and (conf or 0.0) >= 0.5:
+                traffic = "green"
+            else:
+                traffic = "yellow"
+
+            return UiLiveAdvice(
+                timestamp=ts,
+                headline_action=action,
+                traffic_light=traffic,
+                target_position=float(final_adv.get("target_position", 0.0) or 0.0),
+                expected_edge_bps=edge,
+                expected_cost_bps=cost,
+                confidence=conf,
+                entropy=(float(final_adv.get("entropy")) if isinstance(final_adv.get("entropy"), (float, int)) else None),
+                risk_note=str(final_adv.get("reason", "")),
+                reasons=reasons,
+                advisory_mode="spot_only",
+                target_scope="advisory_sleeve",
+                top_alternatives=(final_adv.get("alternatives", []) if isinstance(final_adv.get("alternatives"), list) else []),
+                invalidation_notes=(final_adv.get("invalidation", []) if isinstance(final_adv.get("invalidation"), list) else []),
+            )
+
         bundle_v2 = self._bundle_v2()
         if bundle_v2 is not None:
             p = bundle_v2["proposal"]

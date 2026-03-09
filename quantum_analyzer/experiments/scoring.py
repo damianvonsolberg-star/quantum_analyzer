@@ -70,6 +70,12 @@ def score_result(summary: dict[str, Any], diagnostics: dict[str, Any]) -> dict[s
     s_conf = _clip01(_metric("confidence_reliability", cal))
     s_ent = _clip01(1.0 - _metric("entropy_quality", 0.5))
 
+    critical_required = {"cross_window_robustness", "regime_robustness", "confidence_reliability", "entropy_quality"}
+    missing_critical = sorted(set(unavailable_metrics).intersection(critical_required))
+    strict_mode = bool(summary.get("strict_robustness", False))
+    if strict_mode and missing_critical:
+        hard_gate_failures.append("missing_critical_robustness_metrics")
+
     metrics = {
         "s_return": s_ret,
         "s_drawdown": s_dd,
