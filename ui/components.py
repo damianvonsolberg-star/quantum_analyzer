@@ -131,7 +131,11 @@ def sidebar_controls() -> None:
         st.session_state["artifact_dir"] = latest
         persist_artifact_dir(latest)
 
-    st.session_state["artifact_dir"] = st.sidebar.text_input("Artifact directory", st.session_state["artifact_dir"])
+    st.session_state.setdefault("artifact_dir_input", st.session_state["artifact_dir"])
+    if st.session_state["artifact_dir_input"] != st.session_state["artifact_dir"]:
+        st.session_state["artifact_dir_input"] = st.session_state["artifact_dir"]
+
+    st.session_state["artifact_dir"] = st.sidebar.text_input("Artifact directory", st.session_state["artifact_dir"], key="artifact_dir_input")
     persist_artifact_dir(st.session_state["artifact_dir"])
     st.session_state["wallet_address"] = st.sidebar.text_input("Wallet address (BENCHMARK_WALLET)", st.session_state["wallet_address"])
     st.session_state["rpc_url"] = st.sidebar.text_input("Solana RPC URL (SOL_RPC_URL)", st.session_state["rpc_url"])
