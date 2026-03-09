@@ -64,15 +64,24 @@ def persist_artifact_dir(path: str) -> None:
 
 
 def latest_operator_artifact_dir() -> str | None:
-    # 1) explicit advise_now doctor path (if present)
+    # 1) explicit advise_now doctor path (if present and fresh)
     p = ROOT / "artifacts" / "explorer" / "advise_now_status.json"
     if p.exists():
         try:
             import json
+            from datetime import datetime, timezone
 
             j = json.loads(p.read_text(encoding="utf-8"))
             d = j.get("doctor_artifacts")
-            if d and Path(str(d)).exists():
+            ts = j.get("last_run_at")
+            fresh = False
+            if ts:
+                t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=timezone.utc)
+                age_min = (datetime.now(timezone.utc) - t).total_seconds() / 60.0
+                fresh = age_min <= 60
+            if d and Path(str(d)).exists() and fresh:
                 return str(d)
         except Exception:
             pass
@@ -83,10 +92,8 @@ def latest_operator_artifact_dir() -> str | None:
         try:
             dirs = [x for x in exp_root.iterdir() if x.is_dir() and (x / "artifact_bundle.json").exists()]
             if dirs:
-                # Prefer fully-populated runs (actions+equity) for consistent UI pages.
-                rich = [d for d in dirs if (d / "actions.csv").exists() and (d / "equity_curve.csv").exists()]
-                pool = rich if rich else dirs
-                newest = sorted(pool, key=lambda d: d.stat().st_mtime, reverse=True)[0]
+                # Always follow the true newest run to avoid pinning to old historical traces.
+                newest = sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)[0]
                 return str(newest)
         except Exception:
             pass
