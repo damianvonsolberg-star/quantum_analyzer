@@ -4,7 +4,7 @@
   "symbol": "BTCUSDT",
   "timeframe": "15m",
   "date": "2026-03-07",
-  "updated_at": "2026-03-08T22:49:40.157083+00:00",
+  "updated_at": "2026-03-09T00:33:29.920676+00:00",
   "entries": [
     {
       "written_at": "2026-03-08T22:49:40.157024+00:00",
@@ -16,11 +16,22 @@
         "min_source_ts_ms": 1772841600000,
         "max_source_ts_ms": 1772927100000
       }
+    },
+    {
+      "written_at": "2026-03-09T00:33:29.920659+00:00",
+      "file": "part-20260309T003329919521Z-59eaddf5.parquet",
+      "rows": 96,
+      "checksum_sha256": "baead5cb1ecc1374eba0d6084195b3bc98aba69d60dbe9f84641f6cd4f0f2a0c",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772841600000,
+        "max_source_ts_ms": 1772927100000
+      }
     }
   ],
   "totals": {
-    "files": 1,
-    "rows": 96
+    "files": 2,
+    "rows": 192
   },
   "latest_watermark": {
     "min_source_ts_ms": 1772841600000,

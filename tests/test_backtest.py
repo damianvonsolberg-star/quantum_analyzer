@@ -9,6 +9,8 @@ import pandas as pd
 import json
 
 from quantum_analyzer.backtest.engine import BacktestConfig, run_backtest
+from quantum_analyzer.experiments.runner import run_experiments
+from quantum_analyzer.experiments.specs import ExperimentSpec
 from quantum_analyzer.contracts import ARTIFACT_SCHEMA_V2
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig, purged_walkforward_splits
 from quantum_analyzer.paths.archetypes import PathTemplate
@@ -97,3 +99,66 @@ def test_90day_walkforward_local_data_contract(tmp_path: Path) -> None:
     result = run_backtest(features, close, _templates(), wf, bt, out_dir=tmp_path / "wf90")
     assert result.summary["test_bars"] > 0
     assert (tmp_path / "wf90" / "summary.json").exists()
+
+
+def test_experiment_runner_enforces_subset_and_regime_slice(tmp_path: Path, monkeypatch) -> None:
+    features, close = _synthetic_series(n=24 * 30)
+    features["hour_sin"] = (features.index.hour.astype(float) / 24.0)
+    features["dow"] = features.index.dayofweek.astype(float)
+    features["btc_return_1h"] = 0.0
+
+    captured_cols = []
+
+    class _DummyCand:
+        candidate_id = "dummy"
+        family = "trend"
+
+    class _DummyResult:
+        candidate_id = "dummy"
+        family = "trend"
+        summary = {"return_pct": 0.0}
+        diagnostics = {"max_drawdown": 0.0, "turnover": 0.0, "calibration_proxy": 0.0, "expectancy_by_template": {"none": 0.0}}
+
+    def _build_candidate(**kwargs):
+        return _DummyCand()
+
+    def _evaluate_candidate(*, features, close, candidate, walkforward, backtest, out_dir=None):
+        captured_cols.append(set(features.columns))
+        assert len(features) > 0
+        return _DummyResult()
+
+    monkeypatch.setattr("quantum_analyzer.experiments.runner.build_candidate", _build_candidate)
+    monkeypatch.setattr("quantum_analyzer.experiments.runner.evaluate_candidate", _evaluate_candidate)
+
+    specs = [
+        ExperimentSpec(window_bars=24 * 14, test_bars=24 * 5, horizon=12, feature_subset="geom_core", regime_slice="low_vol", policy_params={}),
+        ExperimentSpec(window_bars=24 * 14, test_bars=24 * 5, horizon=12, feature_subset="full_stack", regime_slice="high_vol", policy_params={}),
+    ]
+
+    rows, failures = run_experiments(
+        specs=specs,
+        snapshot_id="snap1",
+        features_full=features,
+        close=close,
+        templates=[],
+        out_root=tmp_path,
+    )
+    assert len(failures) == 0
+    assert len(rows) == 2
+    assert "micro_range_pos_24h" in captured_cols[0]
+    assert "hour_sin" in captured_cols[1]
+
+    bad_specs = [
+        ExperimentSpec(window_bars=24 * 14, test_bars=24 * 5, horizon=12, feature_subset="geom_core", regime_slice="unknown_slice", policy_params={}),
+    ]
+    rows2, failures2 = run_experiments(
+        specs=bad_specs,
+        snapshot_id="snap1",
+        features_full=features,
+        close=close,
+        templates=[],
+        out_root=tmp_path,
+    )
+    assert len(rows2) == 0
+    assert len(failures2) == 1
+    assert "Unknown regime slice" in failures2[0]["error"]

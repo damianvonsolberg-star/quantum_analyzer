@@ -5,6 +5,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
+def release_state_from_gates(passed: bool, failures: list[str]) -> str:
+    if passed:
+        return "EDGE"
+    if len(failures) <= 2:
+        return "LOW_EDGE"
+    return "NO_EDGE"
+
+
 @dataclass
 class DriftThresholds:
     max_feature_psi: float = 0.35

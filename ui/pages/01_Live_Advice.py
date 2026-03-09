@@ -44,7 +44,12 @@ if isinstance(cycle, dict):
     if state == "running":
         st.info(f"Research cycle: RUNNING · {step_txt}")
     elif state == "failed":
-        st.warning(f"Research cycle: FAILED · {cycle.get('error', 'unknown_error')}")
+        err = str(cycle.get("error", "unknown_error"))
+        if len(err) > 220:
+            err = err[:220] + " …"
+        st.warning(f"Research cycle: FAILED · {err}")
+        with st.expander("Research cycle failure details"):
+            st.json(cycle)
     else:
         st.caption(f"Research cycle: {state.upper()} · last finish: {cycle.get('finished_at', 'n/a')}")
 

@@ -64,18 +64,30 @@ def persist_artifact_dir(path: str) -> None:
 
 
 def _latest_operator_artifact_hint() -> str | None:
+    # 1) explicit advise_now doctor path (if present)
     p = ROOT / "artifacts" / "explorer" / "advise_now_status.json"
-    if not p.exists():
-        return None
-    try:
-        import json
+    if p.exists():
+        try:
+            import json
 
-        j = json.loads(p.read_text(encoding="utf-8"))
-        d = j.get("doctor_artifacts")
-        if d and Path(str(d)).exists():
-            return str(d)
-    except Exception:
-        return None
+            j = json.loads(p.read_text(encoding="utf-8"))
+            d = j.get("doctor_artifacts")
+            if d and Path(str(d)).exists():
+                return str(d)
+        except Exception:
+            pass
+
+    # 2) fallback to newest experiment artifact dir from continuous cycle
+    exp_root = ROOT / "artifacts" / "explorer" / "experiments"
+    if exp_root.exists():
+        try:
+            dirs = [x for x in exp_root.iterdir() if x.is_dir() and (x / "artifact_bundle.json").exists()]
+            if dirs:
+                newest = sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)[0]
+                return str(newest)
+        except Exception:
+            pass
+
     return None
 
 
@@ -84,7 +96,15 @@ def init_state() -> None:
     persisted = load_persisted_artifact_dir()
     hint = _latest_operator_artifact_hint()
     default_artifacts = hint or persisted or _resolve_default_artifact_dir(cfg)
-    st.session_state.setdefault("artifact_dir", default_artifacts)
+
+    # Always prioritize latest operator hint to avoid getting stuck on stale persisted dirs.
+    current = st.session_state.get("artifact_dir")
+    if hint and current != hint:
+        st.session_state["artifact_dir"] = hint
+        persist_artifact_dir(hint)
+    else:
+        st.session_state.setdefault("artifact_dir", default_artifacts)
+
     st.session_state.setdefault("wallet_address", cfg.default_wallet)
     st.session_state.setdefault("rpc_url", cfg.default_rpc)
     st.session_state.setdefault("refresh_seconds", cfg.default_refresh_seconds)

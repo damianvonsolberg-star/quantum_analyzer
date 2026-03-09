@@ -24,7 +24,7 @@ def test_lock_acquire_release(tmp_path):
 def test_run_research_cycle_success(monkeypatch):
     import ui.research_ops as ro
 
-    def _run(cmd, capture_output=True, text=True, timeout=None):
+    def _run(cmd, capture_output=True, text=True, timeout=None, env=None):
         return _R(0)
 
     monkeypatch.setattr(ro.subprocess, "run", _run)

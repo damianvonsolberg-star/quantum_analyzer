@@ -21,7 +21,6 @@ from quantum_analyzer.experiments.runner import run_experiments
 from quantum_analyzer.experiments.search_space import make_search_space
 from quantum_analyzer.experiments.specs import ExplorerRunManifest
 from quantum_analyzer.features.feature_store import build_feature_snapshot, load_feature_snapshot
-from quantum_analyzer.features.subsets import resolve_feature_subset
 from quantum_analyzer.paths.archetypes import PathTemplate
 from quantum_analyzer.paths.miner import MinerConfig, mine_path_templates
 
@@ -96,14 +95,19 @@ def main() -> int:
     cfg = _load_config(args.config)
     rcfg = cfg.get("research", {}) if isinstance(cfg, dict) else {}
 
+    trading_symbol = "SOLUSDC"
+    price_source_symbol = "SOLUSDT"
+    timeframe = "1h"
+
     if args.fixture_synthetic:
         snapshot_id = "fixture-synthetic"
-        features, close, templates = _synthetic_data()
+        features_full, close, templates = _synthetic_data()
     else:
         data_root = rcfg.get("data_root", "data/binance")
         timeframe = rcfg.get("explorer_timeframe", "1h")
         primary_symbol = rcfg.get("primary_symbol", "SOLUSDC")
         price_source_symbol = rcfg.get("price_source_symbol", "SOLUSDT")
+        trading_symbol = primary_symbol
         ctx = rcfg.get("context_symbols", ["BTCUSDC", "BTCUSDT"])
 
         snapshot_dir = "artifacts/data_quality"
@@ -130,12 +134,7 @@ def main() -> int:
         snapshot_id = snap.snapshot_id
 
         f_all = load_feature_snapshot("artifacts/features", snapshot_id)
-        subset_name = rcfg.get("feature_subset", "full_stack")
-        cols = resolve_feature_subset(subset_name)
-        missing = [c for c in cols if c not in f_all.columns]
-        if missing:
-            raise RuntimeError(f"feature subset {subset_name} missing columns: {missing}")
-        features = f_all[cols].copy()
+        features_full = f_all
 
         close_col = "close" if "close" in f_all.columns else None
         if close_col is None:
@@ -170,10 +169,13 @@ def main() -> int:
     rows, failures = run_experiments(
         specs=specs,
         snapshot_id=snapshot_id,
-        features=features,
+        features_full=features_full,
         close=close,
         templates=templates,
         out_root=out_root,
+        trading_symbol=trading_symbol,
+        price_source_symbol=price_source_symbol,
+        timeframe=timeframe,
     )
 
     reg_path = append_registry(out_root, rows)

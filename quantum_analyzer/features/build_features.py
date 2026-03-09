@@ -44,6 +44,8 @@ def build_feature_frame(
     disable those feature columns instead of silently fabricating history.
     """
     df = sol_klines.copy().sort_values("open_time_ms")
+    if "open_time_ms" in df.columns and df["open_time_ms"].duplicated().any():
+        df = df.drop_duplicates(subset=["open_time_ms"], keep="last")
     idx = pd.to_datetime(df["open_time_ms"], unit="ms", utc=True)
     df = df.set_index(idx)
 
@@ -57,9 +59,12 @@ def build_feature_frame(
     of_f = compute_orderflow_features(agg_trades=agg_trades, book_ticker=book_ticker, kline_index=base.index)
 
     btc = btc_klines.copy().sort_values("open_time_ms")
+    if "open_time_ms" in btc.columns and btc["open_time_ms"].duplicated().any():
+        btc = btc.drop_duplicates(subset=["open_time_ms"], keep="last")
     btc_idx = pd.to_datetime(btc["open_time_ms"], unit="ms", utc=True)
     btc_close = btc.set_index(btc_idx)["close"].astype(float)
     cross_f = compute_cross_asset_features(base["close"], btc_close)
+    cross_f["btc_return_1h"] = btc_close.reindex(base.index).ffill().pct_change(1).fillna(0.0)
 
     funding_s = pd.Series(dtype=float)
     if funding is not None and not funding.empty:
@@ -67,6 +72,8 @@ def build_feature_frame(
             funding["funding_rate"].astype(float).values,
             index=pd.to_datetime(funding["source_ts_ms"], unit="ms", utc=True),
         ).sort_index()
+        if funding_s.index.has_duplicates:
+            funding_s = funding_s.groupby(level=0, sort=True).last()
 
     oi_s = pd.Series(dtype=float)
     if open_interest is not None and not open_interest.empty:
@@ -74,15 +81,20 @@ def build_feature_frame(
             open_interest["open_interest"].astype(float).values,
             index=pd.to_datetime(open_interest["source_ts_ms"], unit="ms", utc=True),
         ).sort_index()
+        if oi_s.index.has_duplicates:
+            oi_s = oi_s.groupby(level=0, sort=True).last()
 
     break_f = compute_structural_break_features(base["close"], funding_s, oi_s)
 
     basis_s = pd.Series(np.nan, index=base.index)
     if basis is not None and not basis.empty:
-        basis_s = pd.Series(
+        basis_raw = pd.Series(
             basis["basis_bps"].astype(float).values,
             index=pd.to_datetime(basis["source_ts_ms"], unit="ms", utc=True),
-        ).sort_index().reindex(base.index, method="ffill")
+        ).sort_index()
+        if basis_raw.index.has_duplicates:
+            basis_raw = basis_raw.groupby(level=0, sort=True).last()
+        basis_s = basis_raw.reindex(base.index, method="ffill")
 
     # coverage checks
     cov_agg = _coverage_ratio(agg_trades["trade_time_ms"] if agg_trades is not None and not agg_trades.empty else None, base.index)
@@ -120,6 +132,8 @@ def build_feature_frame(
         src_idx = pd.to_datetime(df_in[col], unit=unit, utc=True, errors="coerce")
         src = pd.Series(df_in[col].astype("float64").values, index=src_idx).sort_index()
         src = src[~src.index.isna()]
+        if src.index.has_duplicates:
+            src = src.groupby(level=0, sort=True).last()
         return src.reindex(all_f.index, method="ffill")
 
     sol_src = index_ts_ms.astype("float64")
@@ -147,6 +161,10 @@ def build_feature_frame(
     all_f["source_ts_funding_ms"] = fund_src.fillna(sol_src).astype("int64")
     all_f["source_ts_oi_ms"] = oi_src.fillna(sol_src).astype("int64")
     all_f["source_ts_basis_ms"] = basis_src.fillna(sol_src).astype("int64")
+
+    # time-structure features for discovery
+    all_f["hour_sin"] = (all_f.index.hour.astype(float) / 24.0)
+    all_f["dow"] = all_f.index.dayofweek.astype(float)
 
     # explicit research semantics/provenance
     all_f["primary_symbol"] = primary_symbol

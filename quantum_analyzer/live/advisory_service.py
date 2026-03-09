@@ -35,10 +35,10 @@ def default_market_fetcher() -> dict[str, pd.DataFrame]:
 
 def _hold_output(reason: str) -> AdvisoryOutput:
     now = datetime.now(timezone.utc)
-    fb = ForecastBundle(ts=now, symbol="SOLUSDT", distributions={}, diagnostics={"reason": reason})
+    fb = ForecastBundle(ts=now, symbol="SOLUSDC", distributions={}, diagnostics={"reason": reason})
     hold = ActionProposal(
         ts=now,
-        symbol="SOLUSDT",
+        symbol="SOLUSDC",
         action="HOLD",
         score=0.0,
         size_fraction=0.0,
@@ -92,41 +92,48 @@ def run_advisory(
         action = str(promoted.get("action", "HOLD"))
         target = float(promoted.get("target_position", 0.0) or 0.0)
         conf = float(promoted.get("confidence", 0.0) or 0.0)
+        source_meta = promoted.get("source", {}) if isinstance(promoted.get("source"), dict) else {}
+        symbols = promoted.get("symbols", {}) if isinstance(promoted.get("symbols"), dict) else {}
+        trading_symbol = str(symbols.get("trading_symbol", promoted.get("symbol", "SOLUSDC")))
+        supporting = promoted.get("supporting_metrics", {}) if isinstance(promoted.get("supporting_metrics"), dict) else {}
+        expected_edge = float(supporting.get("expectancy", supporting.get("expected_edge_bps", 0.0)) or 0.0)
+        expected_cost = supporting.get("expected_cost_bps", None)
+        expected_cost_bps = float(expected_cost) if expected_cost is not None else 15.0
+
         proposal = ActionProposal(
             ts=now,
-            symbol="SOLUSDT",
+            symbol=trading_symbol,
             action=action,
             score=conf,
             size_fraction=abs(target),
             target_position=target,
-            expected_edge_bps=float(promoted.get("supporting_metrics", {}).get("expectancy", 0.0) or 0.0),
-            expected_cost_bps=0.0,
+            expected_edge_bps=expected_edge,
+            expected_cost_bps=expected_cost_bps,
             reason=str(promoted.get("reason", "promoted_signal")),
             advisory_mode="spot_only",
             target_scope="advisory_sleeve",
-            candidate_id=str((promoted.get("supporting_metrics", {}) or {}).get("supporting_metrics", {}).get("candidate_id", "")),
-            candidate_family=str((promoted.get("supporting_metrics", {}) or {}).get("supporting_metrics", {}).get("candidate_family", "")),
+            candidate_id=str((supporting.get("supporting_metrics", {}) or {}).get("candidate_id", "")),
+            candidate_family=str((supporting.get("supporting_metrics", {}) or {}).get("candidate_family", "")),
             controls={
                 "top_alternatives": promoted.get("top_alternatives", []),
                 "invalidation_reasons": promoted.get("invalidation_reasons", []),
-                "supporting_metrics": promoted.get("supporting_metrics", {}),
+                "supporting_metrics": supporting,
             },
         )
-        forecast = ForecastBundle(ts=now, symbol="SOLUSDT", distributions={}, diagnostics={"source": "promoted_signal_bundle", "confidence": conf})
-        gov_status = "OK"
-        if isinstance(promoted.get("source"), dict):
-            gov_status = str(promoted.get("source", {}).get("governance_status", "OK"))
+        forecast = ForecastBundle(ts=now, symbol=trading_symbol, distributions={}, diagnostics={"source": "promoted_signal_bundle", "confidence": conf})
+        gov_status = str(source_meta.get("governance_status", "WATCH"))
+        drift_payload = promoted.get("drift", {}) if isinstance(promoted.get("drift"), dict) else {}
         gov = {
             "overall_status": gov_status,
             "kill_switch_active": bool(gov_status != "OK"),
-            "kill_switch_reasons": (["governance_not_ok"] if gov_status != "OK" else []),
-            "artifact_staleness": "fresh",
-            "data_staleness": "fresh",
-            "feature_drift": 0.0,
-            "calibration_drift": 0.0,
-            "state_occupancy_drift": 0.0,
-            "action_rate_drift": 0.0,
-            "cost_drift_bps": 0.0,
+            "kill_switch_reasons": (drift_payload.get("kill_switch_reasons") if drift_payload.get("kill_switch_reasons") else (["governance_not_ok"] if gov_status != "OK" else [])),
+            "artifact_staleness": str(drift_payload.get("artifact_staleness", "unknown")),
+            "data_staleness": str(drift_payload.get("data_staleness", "unknown")),
+            "feature_drift": float(drift_payload.get("feature_drift", 0.0) or 0.0),
+            "calibration_drift": float(drift_payload.get("calibration_drift", 0.0) or 0.0),
+            "state_occupancy_drift": float(drift_payload.get("state_occupancy_drift", 0.0) or 0.0),
+            "action_rate_drift": float(drift_payload.get("action_rate_drift", 0.0) or 0.0),
+            "cost_drift_bps": float(drift_payload.get("cost_drift_bps", 0.0) or 0.0),
         }
         return AdvisoryOutput(
             forecast=forecast,

@@ -22,6 +22,12 @@ def compute_orderflow_features(
         at = agg_trades.copy()
         at["ts"] = pd.to_datetime(at["trade_time_ms"], unit="ms", utc=True)
         at = at.set_index("ts").sort_index()
+        if at.index.has_duplicates:
+            at = at.groupby(level=0, sort=True).agg({
+                "qty": "sum",
+                "price": "last",
+                "is_buyer_maker": "last",
+            })
         at["signed_qty"] = np.where(at["is_buyer_maker"].astype(bool), -at["qty"], at["qty"])
 
         one_h_qty = at["qty"].rolling("1h").sum()
@@ -39,6 +45,8 @@ def compute_orderflow_features(
     bt = book_ticker.copy()
     bt["ts"] = pd.to_datetime(bt["source_ts_ms"], unit="ms", utc=True)
     bt = bt.set_index("ts").sort_index()
+    if bt.index.has_duplicates:
+        bt = bt.groupby(level=0, sort=True).last()
 
     bid = bt["bid_price"].astype(float)
     ask = bt["ask_price"].astype(float)

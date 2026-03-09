@@ -104,23 +104,62 @@ def promote_from_leaderboard(
         (out_root / "current_run_manifest.json").write_text(json.dumps({"approved": 0, "status": "no_approved"}, indent=2), encoding="utf-8")
         return out
 
-    # robust cluster promotion by (candidate_family, regime_slice)
-    score_col = "robust_score" if "robust_score" in approved.columns else "score"
-    grp_cols = [c for c in ["candidate_family", "regime_slice"] if c in approved.columns]
+    # cluster promotion by family/subset/regime/horizon (+local parameter neighborhood when available)
+    score_col = "promoted_score" if "promoted_score" in approved.columns else ("robust_score" if "robust_score" in approved.columns else "score")
+    grp_cols = [c for c in ["candidate_family", "feature_subset", "regime_slice", "horizon"] if c in approved.columns]
+    if "policy_params_hash" in approved.columns:
+        grp_cols.append("policy_params_hash")
     if not grp_cols:
         grp_cols = ["promotion_status"]
 
-    ranked = (
-        approved.groupby(grp_cols, dropna=False)
-        .agg(
-            robust_score=(score_col, "mean"),
-            support=(score_col, "count"),
-            expectancy=("expectancy", "mean") if "expectancy" in approved.columns else (score_col, "mean"),
-            target_position=("return_pct", lambda x: 0.30 if float(x.mean()) > 0 else 0.0),
+    def _weighted_median(values: pd.Series, weights: pd.Series) -> float:
+        if values.empty:
+            return 0.0
+        v = values.astype(float).fillna(0.0).to_numpy()
+        w = weights.astype(float).fillna(0.0).to_numpy()
+        if float(w.sum()) <= 0.0:
+            return float(pd.Series(v).median())
+        order = v.argsort()
+        v_sorted = v[order]
+        w_sorted = w[order]
+        cdf = w_sorted.cumsum() / w_sorted.sum()
+        return float(v_sorted[(cdf >= 0.5).argmax()])
+
+    rows = []
+    for keys, g in approved.groupby(grp_cols, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        d = {k: v for k, v in zip(grp_cols, keys)}
+        weights = g[score_col].astype(float).fillna(0.0)
+        robust_score = float((g[score_col].astype(float).fillna(0.0)).mean())
+        support = int(len(g))
+        expectancy = float(g["expectancy"].astype(float).mean()) if "expectancy" in g.columns else robust_score
+        context_match = float(g["context_match"].astype(float).mean()) if "context_match" in g.columns else 0.5
+        agreement = float((weights > 0).mean()) if len(weights) else 0.0
+        cluster_score = float(max(0.0, min(1.0, robust_score * (0.7 + 0.3 * context_match) * agreement)))
+
+        if "target_position" in g.columns:
+            tp = _weighted_median(g["target_position"], weights)
+        elif "return_pct" in g.columns:
+            sign = 1.0 if float(g["return_pct"].mean()) > 0 else 0.0
+            tp = _weighted_median(pd.Series([0.35 * sign] * len(g), index=g.index), weights)
+        else:
+            tp = 0.0
+
+        d.update(
+            {
+                "robust_score": robust_score,
+                "cluster_score": cluster_score,
+                "support": support,
+                "agreement": agreement,
+                "context_match": context_match,
+                "expectancy": expectancy,
+                "target_position": float(tp),
+            }
         )
-        .reset_index()
-        .sort_values("robust_score", ascending=False)
-    )
+        rows.append(d)
+
+    ranked = pd.DataFrame(rows).sort_values("cluster_score", ascending=False)
 
     ranked_rows: list[dict[str, Any]] = []
     approved_rows: list[dict[str, Any]] = []
@@ -128,17 +167,22 @@ def promote_from_leaderboard(
     for _, r in ranked.iterrows():
         action_family = "BUY SPOT" if float(r.get("target_position", 0.0) or 0.0) > 0 else "REDUCE SPOT"
         row = {
-            "candidate_id": f"{r.get('candidate_family','unknown')}:{r.get('regime_slice','all')}",
+            "candidate_id": f"{r.get('candidate_family','unknown')}:{r.get('feature_subset','all')}:{r.get('regime_slice','all')}:{r.get('horizon','na')}",
             "candidate_family": str(r.get("candidate_family", "unknown")),
+            "feature_subset": str(r.get("feature_subset", "all")),
             "regime_slice": str(r.get("regime_slice", "all")),
+            "horizon": r.get("horizon", None),
             "action": action_family,
             "target_position": float(r.get("target_position", 0.0) or 0.0),
-            "vote_weight": float(r.get("robust_score", 0.0) or 0.0),
+            "vote_weight": float(r.get("cluster_score", 0.0) or 0.0),
             "robust_score": float(r.get("robust_score", 0.0) or 0.0),
-            "confidence": float(r.get("robust_score", 0.0) or 0.0),
+            "cluster_score": float(r.get("cluster_score", 0.0) or 0.0),
+            "confidence": float(r.get("cluster_score", 0.0) or 0.0),
             "expectancy": float(r.get("expectancy", 0.0) or 0.0),
             "sample_support": float(r.get("support", 0.0) or 0.0),
-            "reason": "robust_cluster",
+            "agreement": float(r.get("agreement", 0.0) or 0.0),
+            "context_match": float(r.get("context_match", 0.5) or 0.5),
+            "reason": "cluster_consensus",
         }
         row["invalidation_notes"] = build_invalidation_notes(row)
         row.setdefault("oos_usefulness", 0.6)
@@ -168,11 +212,12 @@ def promote_from_leaderboard(
     decision = decide_action(ranked_rows)
     explain = explain_decision(decision, ranked_rows)
 
+    top = ranked_rows[0] if ranked_rows else {}
     reasons = build_invalidation_reasons(
-        entropy=0.4,
+        entropy=float(top.get("entropy", top.get("entropy_quality", 0.5)) or 0.5),
         governance_status=governance_status,
-        edge_bps=10.0,
-        cost_bps=8.0,
+        edge_bps=float(top.get("expectancy", 0.0) or 0.0) * 10_000.0,
+        cost_bps=float(top.get("expected_cost_bps", top.get("cost_drift_bps", 8.0)) or 8.0),
     )
     # include cluster invalidation notes from winner
     if ranked_rows:

@@ -193,8 +193,26 @@ class ArtifactAdapter:
                 raise AdapterValidationError(f"schema v2 proposal missing required fields: {', '.join(missing)}")
 
             timestamp = str(p.get("timestamp") or "")
-            if not timestamp:
-                raise AdapterValidationError("schema v2 proposal timestamp is empty")
+            # guard against malformed numeric timestamps from intermediate artifacts
+            ts_ok = False
+            if timestamp:
+                try:
+                    _ = pd.to_datetime(timestamp, utc=True, errors="raise")
+                    ts_ok = True
+                except Exception:
+                    ts_ok = False
+            if not ts_ok:
+                meta_ts = (bundle_v2.get("artifact_meta", {}) or {}).get("produced_at")
+                drift_ts = (bundle_v2.get("drift", {}).get("timestamps", {}) or {}).get("as_of") if isinstance(bundle_v2.get("drift"), dict) else None
+                cand = str(meta_ts or drift_ts or "")
+                try:
+                    _ = pd.to_datetime(cand, utc=True, errors="raise")
+                    timestamp = cand
+                    ts_ok = True
+                except Exception:
+                    ts_ok = False
+            if not ts_ok:
+                raise AdapterValidationError("schema v2 proposal timestamp is invalid")
             headline_action = str(p["action"])
             target_position = float(p["target_position"])
             edge = float(p["expected_edge_bps"])

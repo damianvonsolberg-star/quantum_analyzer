@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 
 
 @dataclass(frozen=True)
@@ -30,3 +32,12 @@ DEFAULT_FEATURE_REGISTRY: dict[str, FeatureDef] = {
 def feature_versions(registry: dict[str, FeatureDef] | None = None) -> dict[str, str]:
     r = registry or DEFAULT_FEATURE_REGISTRY
     return {k: v.version for k, v in r.items()}
+
+
+def registry_version_hash(registry: dict[str, FeatureDef] | None = None) -> str:
+    import hashlib
+    import json
+
+    versions = feature_versions(registry)
+    raw = json.dumps(dict(sorted(versions.items())), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]

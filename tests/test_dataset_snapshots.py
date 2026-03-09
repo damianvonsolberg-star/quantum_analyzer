@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from quantum_analyzer.data.schemas import KLINE_INTERVALS
 from quantum_analyzer.datasets.snapshots import build_snapshot
 
 
@@ -20,6 +21,11 @@ def _write_klines(root: Path, symbol: str, timeframe: str = "1h") -> None:
         }
     )
     df.to_parquet(p / "part-000.parquet", index=False)
+
+
+def test_timeframe_validation_consistency():
+    assert "1d" in KLINE_INTERVALS
+    assert "1w" in KLINE_INTERVALS
 
 
 def test_snapshot_id_is_deterministic(tmp_path: Path):

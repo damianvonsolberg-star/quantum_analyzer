@@ -112,6 +112,8 @@ def test_build_feature_frame_contracts() -> None:
         "source_ts_funding_ms",
         "source_ts_oi_ms",
         "source_ts_basis_ms",
+        "hour_sin",
+        "dow",
     }
     missing = required.difference(feats.columns)
     assert not missing, f"Missing features: {missing}"

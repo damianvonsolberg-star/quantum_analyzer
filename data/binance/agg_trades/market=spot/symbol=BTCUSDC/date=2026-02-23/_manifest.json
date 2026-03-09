@@ -1,0 +1,29 @@
+{
+  "dataset": "agg_trades",
+  "market": "spot",
+  "symbol": "BTCUSDC",
+  "timeframe": null,
+  "date": "2026-02-23",
+  "updated_at": "2026-03-09T00:33:05.090442+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-09T00:33:04.946991+00:00",
+      "file": "part-20260309T003303426197Z-faed6091.parquet",
+      "rows": 458286,
+      "checksum_sha256": "4c26909e50d869febd7ab7abbbf166f3af8b2cab29e648d8dc582022744a2d61",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1771804800996,
+        "max_source_ts_ms": 1771891198124
+      }
+    }
+  ],
+  "totals": {
+    "files": 1,
+    "rows": 458286
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1771804800996,
+    "max_source_ts_ms": 1771891198124
+  }
+}

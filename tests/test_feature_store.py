@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 
 from quantum_analyzer.datasets.snapshots import build_snapshot
+import json
+
 from quantum_analyzer.features.feature_store import build_feature_snapshot, load_feature_snapshot
 
 
@@ -43,3 +45,9 @@ def test_feature_store_writes_and_loads(tmp_path: Path):
     df = load_feature_snapshot(tmp_path / "features", snap.snapshot_id)
     assert not df.empty
     assert "micro_range_pos_24h" in df.columns
+
+    manifest = json.loads(fs.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["symbols"]["trading_symbol"] == "SOLUSDC"
+    assert manifest["symbols"]["price_source_symbol"] == "SOLUSDT"
+    assert "registry_version_hash" in manifest
+    assert "subsets_version_hash" in manifest

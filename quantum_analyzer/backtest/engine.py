@@ -9,6 +9,49 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+
+def _measured_action_stats(history_actions: list[dict[str, Any]], action_label: str) -> tuple[float, float, float, float]:
+    rows = [r for r in history_actions if str(r.get("action", "")).upper() == action_label]
+    if len(rows) < 10:
+        return 0.0, 0.5, 0.0, 0.0
+    rets = np.array([float(r.get("ret_next", 0.0)) for r in rows], dtype=float)
+    mean_ret = float(np.nanmean(rets))
+    p_up = float(np.mean(rets > 0.0))
+    q25 = float(np.nanquantile(rets, 0.25))
+    q75 = float(np.nanquantile(rets, 0.75))
+    return mean_ret, p_up, q25, q75
+
+
+def _distribution_from_returns(h: int, returns: np.ndarray) -> dict[str, Any]:
+    if returns.size == 0:
+        return {
+            "horizon_hours": h,
+            "mean_return": 0.0,
+            "std_return": 0.0,
+            "quantiles": {"q05": 0.0, "q25": 0.0, "q50": 0.0, "q75": 0.0, "q95": 0.0, "p_up": 0.5, "p_down": 0.5, "p_break_up": 0.0, "p_break_down": 0.0},
+            "probability_up": 0.5,
+        }
+    q05, q25, q50, q75, q95 = [float(np.nanquantile(returns, q)) for q in (0.05, 0.25, 0.5, 0.75, 0.95)]
+    p_up = float(np.mean(returns > 0.0))
+    p_down = 1.0 - p_up
+    return {
+        "horizon_hours": h,
+        "mean_return": float(np.nanmean(returns)),
+        "std_return": float(np.nanstd(returns)),
+        "quantiles": {
+            "q05": q05,
+            "q25": q25,
+            "q50": q50,
+            "q75": q75,
+            "q95": q95,
+            "p_up": p_up,
+            "p_down": p_down,
+            "p_break_up": float(np.mean(returns >= q95)),
+            "p_break_down": float(np.mean(returns <= q05)),
+        },
+        "probability_up": p_up,
+    }
+
 from quantum_analyzer.backtest.diagnostics import (
     BacktestDiagnostics,
     action_consistency,
@@ -76,6 +119,7 @@ def run_backtest(
     act_rows: list[dict[str, Any]] = []
 
     all_test_indices: list[int] = []
+    candidate_history: list[dict[str, Any]] = []
 
     for train_idx, test_idx in splits:
         X_train = features.iloc[train_idx]
@@ -134,7 +178,6 @@ def run_backtest(
                 p_up = float(forecast.distributions.get("h36").quantiles.get("p_up", np.nan)) if "h36" in forecast.distributions else np.nan
             else:
                 ts = features.index[i]
-                raw_score = float(score_series.loc[ts]) if score_series is not None and ts in score_series.index else 0.0
                 action_label = str(action_series.loc[ts]) if action_series is not None and ts in action_series.index else "HOLD"
                 if action_label == "BUY":
                     target = 1.0
@@ -144,9 +187,9 @@ def run_backtest(
                     target = position
                 else:
                     target = position
-                edge_bps = float(raw_score * 100.0)
-                reason = f"{candidate_family} candidate signal"
-                p_up = float(np.clip(0.5 + 0.5 * np.tanh(raw_score), 0.0, 1.0))
+                mean_ret, p_up, q25, q75 = _measured_action_stats(candidate_history, action_label)
+                edge_bps = float(mean_ret * 10_000.0)
+                reason = f"{candidate_family} measured OOS action quality"
 
             # enforce per-bar turnover again (defensive)
             delta = np.clip(target - position, -bt_cfg.turnover_cap, bt_cfg.turnover_cap)
@@ -190,12 +233,14 @@ def run_backtest(
                     "template_id": candidate_id,
                     "p_up": p_up,
                     "realized_up": 1 if ret_next > 0 else 0,
+                    "ret_next": ret_next,
                     "turnover_abs": abs(delta),
                     "pnl": pnl,
                     "vol_bucket": vol_bucket,
                     "btc_regime": btc_regime,
                 }
             )
+            candidate_history.append({"action": action_label, "ret_next": ret_next})
 
     eq_df = pd.DataFrame(eq_rows).set_index("ts") if eq_rows else pd.DataFrame(columns=["equity", "pnl", "position"])
     act_df = pd.DataFrame(act_rows).set_index("ts") if act_rows else pd.DataFrame(columns=["action"])
@@ -253,6 +298,15 @@ def run_backtest(
         }
         calibration_score = float(max(0.0, 1.0 - cal))
 
+        # measured forecast distributions from OOS realized returns
+        close_arr = close.astype(float)
+        ret_h12 = np.array([float(close_arr.iloc[i + 12] / close_arr.iloc[i] - 1.0) for i in all_test_indices if (i + 12) < len(close_arr)], dtype=float)
+        ret_h36 = np.array([float(close_arr.iloc[i + 36] / close_arr.iloc[i] - 1.0) for i in all_test_indices if (i + 36) < len(close_arr)], dtype=float)
+        ret_h72 = np.array([float(close_arr.iloc[i + 72] / close_arr.iloc[i] - 1.0) for i in all_test_indices if (i + 72) < len(close_arr)], dtype=float)
+        d12 = _distribution_from_returns(12, ret_h12)
+        d36 = _distribution_from_returns(36, ret_h36)
+        d72 = _distribution_from_returns(72, ret_h72)
+
         # canonical artifact bundle v2
         with (out / "artifact_bundle.json").open("w", encoding="utf-8") as f:
             json.dump(
@@ -264,10 +318,10 @@ def run_backtest(
                         "latest_timestamp": latest_ts,
                     },
                     "forecast": {
-                        "confidence": float(latest_action.get("p_up", 0.0) or 0.0),
+                        "confidence": float(latest_action.get("p_up", d36["quantiles"]["p_up"]) or 0.0),
                         "entropy": None,
                         "calibration_score": calibration_score,
-                        "distributions": {"h12": {}, "h36": {}, "h72": {}},
+                        "distributions": {"h12": d12, "h36": d36, "h72": d72},
                         "timestamps": {"as_of": latest_ts},
                     },
                     "proposal": {

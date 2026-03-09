@@ -84,17 +84,24 @@ def build_snapshot(
     if btc.empty:
         raise ValueError(f"No klines for context symbol {btc_symbol} timeframe={timeframe}")
 
-    # quality checks
+    # quality checks (dedupe first to avoid false hard-fails from append history)
     sol_dups = int(sol.duplicated(subset=["open_time_ms"]).sum()) if "open_time_ms" in sol.columns else 0
     btc_dups = int(btc.duplicated(subset=["open_time_ms"]).sum()) if "open_time_ms" in btc.columns else 0
+    if sol_dups > 0 and "open_time_ms" in sol.columns:
+        sol = sol.sort_values("open_time_ms").drop_duplicates(subset=["open_time_ms"], keep="last")
+    if btc_dups > 0 and "open_time_ms" in btc.columns:
+        btc = btc.sort_values("open_time_ms").drop_duplicates(subset=["open_time_ms"], keep="last")
+
     interval_ms = INTERVAL_MS.get(timeframe)
     if interval_ms is None:
         raise ValueError(f"Unsupported snapshot timeframe: {timeframe}")
     sol_missing_ratio = _missing_interval_ratio(sol["open_time_ms"], interval_ms)
     btc_missing_ratio = _missing_interval_ratio(btc["open_time_ms"], interval_ms)
 
-    aligned_bars = int(len(set(sol["open_time_ms"]).intersection(set(btc["open_time_ms"]))))
-    coverage_ratio = float(aligned_bars / max(min(len(sol), len(btc)), 1))
+    sol_ts = set(sol["open_time_ms"].tolist())
+    btc_ts = set(btc["open_time_ms"].tolist())
+    aligned_bars = int(len(sol_ts.intersection(btc_ts)))
+    coverage_ratio = float(aligned_bars / max(min(len(sol_ts), len(btc_ts)), 1))
 
     quality = {
         "sol_duplicates": sol_dups,
@@ -107,12 +114,14 @@ def build_snapshot(
             coverage_ratio >= float(min_coverage_ratio)
             and sol_missing_ratio <= float(max_gap_ratio)
             and btc_missing_ratio <= float(max_gap_ratio)
-            and sol_dups == 0
-            and btc_dups == 0
         ),
         "thresholds": {
             "min_coverage_ratio": float(min_coverage_ratio),
             "max_gap_ratio": float(max_gap_ratio),
+        },
+        "dedupe_applied": {
+            "sol": bool(sol_dups > 0),
+            "btc": bool(btc_dups > 0),
         },
     }
 
@@ -159,7 +168,7 @@ def build_snapshot(
             "snapshot quality failed: "
             f"coverage_ratio={coverage_ratio:.3f}, "
             f"sol_missing={sol_missing_ratio:.3f}, btc_missing={btc_missing_ratio:.3f}, "
-            f"sol_dups={sol_dups}, btc_dups={btc_dups}"
+            f"sol_dups_raw={sol_dups}, btc_dups_raw={btc_dups}"
         )
 
     snapshot_id = _hash_obj({k: v for k, v in payload.items() if k != "built_at"})

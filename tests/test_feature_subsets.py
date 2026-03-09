@@ -13,3 +13,9 @@ def test_feature_subset_resolves_from_registry():
 def test_unknown_subset_fails_closed():
     with pytest.raises(ValueError):
         resolve_feature_subset("does_not_exist")
+
+
+def test_full_stack_includes_time_structure_features():
+    cols = resolve_feature_subset("full_stack")
+    assert "hour_sin" in cols
+    assert "dow" in cols

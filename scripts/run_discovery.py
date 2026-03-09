@@ -14,7 +14,11 @@ if str(ROOT) not in sys.path:
 
 from quantum_analyzer.discovery.evaluate import evaluate_discovered_candidate
 from quantum_analyzer.discovery.generator import generate_bruteforce, generate_random
+from quantum_analyzer.discovery.genealogy import build_genealogy_entry
+from quantum_analyzer.discovery.meta_research import write_feature_importance_drift, write_signal_decay_monitor
+from quantum_analyzer.discovery.report import write_discovery_report
 from quantum_analyzer.discovery.search_evolutionary import run_evolutionary
+from quantum_analyzer.discovery.survival import attach_survival_fields
 from quantum_analyzer.discovery.transforms import enrich_time_structure
 from quantum_analyzer.experiments.evaluator import build_candidate, evaluate_candidate
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig
@@ -76,6 +80,7 @@ def main() -> int:
     discovered = []
     surviving = []
     rejected = []
+    genealogy_rows = []
     novelty_rows = []
 
     wf = WalkForwardConfig(train_bars=24 * 30, test_bars=24 * 5, purge_bars=6, embargo_bars=6)
@@ -84,15 +89,57 @@ def main() -> int:
     for i, g in enumerate(genomes):
         ev = evaluate_discovered_candidate(g, feats, close, prior=prior)
         cid = f"disc_{i:05d}"
-        row = {"candidate_id": cid, "genome": g, **ev}
-        discovered.append(row)
-        novelty_rows.append({"candidate_id": cid, "novelty": ev["novelty"], "complexity_penalty": ev["complexity_penalty"]})
 
-        # integrate in same evaluator universe
+        # integrate in same evaluator universe (baseline-comparable)
         cand = build_candidate(cid, "discovery_genome", {"genome": g}, "full_stack", 36, "all")
-        _ = evaluate_candidate(features=feats, close=close, candidate=cand, walkforward=wf, backtest=bt)
+        bt_res = evaluate_candidate(features=feats, close=close, candidate=cand, walkforward=wf, backtest=bt)
 
-        if ev["novelty"] >= float(cfg.get("novelty_min_distance", 0.15)) and ev["cost_adjusted_value"] > 0 and ev["sample_support"] >= int(cfg.get("min_oos_support", 40)):
+        row = {
+            "candidate_id": cid,
+            "candidate_family": "discovery_genome",
+            "feature_subset": "full_stack",
+            "regime_slice": "all",
+            "horizon": 36,
+            "genome": g,
+            "expectancy": float(ev.get("expectancy", 0.0) or 0.0),
+            "novelty": float(ev.get("novelty", 0.0) or 0.0),
+            "complexity_penalty": float(ev.get("complexity_penalty", 0.0) or 0.0),
+            "sample_support": int(ev.get("sample_support", 0) or 0),
+            "oos_usefulness": float(ev.get("oos_usefulness", 0.0) or 0.0),
+            "neighbor_consistency": float(ev.get("neighbor_consistency", 0.0) or 0.0),
+            "cross_window_repeatability": float(ev.get("cross_window_repeatability", 0.0) or 0.0),
+            "regime_specialization": float(ev.get("regime_specialization", 0.0) or 0.0),
+            "redundancy": float(ev.get("redundancy", 0.0) or 0.0),
+            "cost_adjusted_value": float(ev.get("cost_adjusted_value", 0.0) or 0.0),
+            "robustness_score": float(bt_res.summary.get("return_pct", 0.0) or 0.0),
+            "interpretability_score": float(max(0.0, 1.0 - float(ev.get("complexity_penalty", 0.0) or 0.0))),
+        }
+        row = attach_survival_fields(row)
+        discovered.append(row)
+        novelty_rows.append({"candidate_id": cid, "novelty": row["novelty"], "complexity_penalty": row["complexity_penalty"]})
+
+        genealogy_rows.append(
+            build_genealogy_entry(
+                candidate_id=cid,
+                genome=g,
+                parent_features=[k for k in [g.get("feature"), g.get("a"), g.get("b")] if isinstance(k, str)] + [t.get("feature") for t in (g.get("terms") or []) if isinstance(t, dict) and isinstance(t.get("feature"), str)],
+                method=("evolutionary" if i >= (len(brut) + len(rnd)) else ("random" if i >= len(brut) else "bruteforce")),
+                transforms=["time_structure_enrichment"],
+                params={k: v for k, v in g.items() if k not in {"rules", "terms"}},
+                timeframe="1h",
+                validation={
+                    "expectancy": row["expectancy"],
+                    "sample_support": row["sample_support"],
+                    "novelty": row["novelty"],
+                },
+                robustness_score=float(row["robustness_score"]),
+                interpretability_score=float(row["interpretability_score"]),
+                survival_status=str(row["survival_status"]),
+                rejection_reason=row.get("rejection_reason"),
+            )
+        )
+
+        if row["survival_status"] == "survived" and row["novelty"] >= float(cfg.get("novelty_min_distance", 0.15)) and row["cost_adjusted_value"] > 0 and row["sample_support"] >= int(cfg.get("min_oos_support", 40)):
             surviving.append(row)
             prior.append(g)
         else:
@@ -103,7 +150,16 @@ def main() -> int:
     (out / "discovered_signals.json").write_text(json.dumps(discovered, indent=2, default=str), encoding="utf-8")
     (out / "surviving_signals.json").write_text(json.dumps(surviving, indent=2, default=str), encoding="utf-8")
     (out / "rejected_signals.json").write_text(json.dumps(rejected, indent=2, default=str), encoding="utf-8")
+    (out / "signal_genealogy.json").write_text(json.dumps(genealogy_rows, indent=2, default=str), encoding="utf-8")
     pd.DataFrame(novelty_rows).to_csv(out / "novelty_scores.csv", index=False)
+
+    write_feature_importance_drift(genealogy_rows, out)
+    write_signal_decay_monitor(genealogy_rows, out)
+    write_discovery_report(genealogy_rows, out)
+
+    # integrate survivors into experiment universe for downstream leaderboard/promotion ingestion
+    surv_df = pd.DataFrame(surviving)
+    surv_df.to_parquet(out / "surviving_signals.parquet", index=False)
 
     print(json.dumps({"discovered": len(discovered), "surviving": len(surviving), "rejected": len(rejected), "snapshot": sid}, indent=2))
     return 0

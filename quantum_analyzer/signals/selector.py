@@ -64,16 +64,29 @@ def select_final_signal(
             "alternatives": alternatives,
         }
 
-    # weighted mean target among top-action members
-    num = 0.0
-    den = 0.0
+    # weighted median target among top-action members
+    vals: list[tuple[float, float]] = []
     for c in approved_candidates:
         if _normalize_action(str(c.get("action", "HOLD"))) != top_action:
             continue
         w = float(c.get("vote_weight", 0.0) or 0.0)
-        num += float(c.get("target_position", 0.0) or 0.0) * w
-        den += w
-    target = (num / den) if den > 0 else 0.0
+        vals.append((float(c.get("target_position", 0.0) or 0.0), max(w, 0.0)))
+
+    if not vals:
+        target = 0.0
+    else:
+        vals = sorted(vals, key=lambda x: x[0])
+        wsum = sum(w for _, w in vals)
+        if wsum <= 0:
+            target = vals[len(vals) // 2][0]
+        else:
+            c = 0.0
+            target = vals[-1][0]
+            for v, w in vals:
+                c += w / wsum
+                if c >= 0.5:
+                    target = v
+                    break
 
     # spot-safe clipping here is explicit and reasoned
     if top_action in {"BUY SPOT", "HOLD"}:

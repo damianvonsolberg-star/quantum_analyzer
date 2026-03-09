@@ -19,13 +19,16 @@ def main() -> int:
     ap.add_argument("--config", default="config/research/solusdc_research.json")
     ap.add_argument("--discovery-config", default="config/discovery/discovery_daily.json")
     ap.add_argument("--interval-seconds", type=int, default=900)
-    ap.add_argument("--runs", type=int, default=1)
+    ap.add_argument("--runs", type=int, default=0, help="0 = run continuously")
     args = ap.parse_args()
 
-    for i in range(args.runs):
+    i = 0
+    while True:
         run_research_cycle(config=args.config, discovery_config=args.discovery_config)
-        if i < args.runs - 1:
-            time.sleep(max(1, args.interval_seconds))
+        i += 1
+        if args.runs > 0 and i >= args.runs:
+            break
+        time.sleep(max(1, args.interval_seconds))
     return 0
 
 

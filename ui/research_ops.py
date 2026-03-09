@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 import subprocess
+import uuid
 from typing import Any
 
 
@@ -56,6 +58,18 @@ def release_lock(root: str | Path) -> None:
     _lock_path(root).unlink(missing_ok=True)
 
 
+def _compact_error(msg: str, max_chars: int = 420) -> str:
+    s = " ".join(str(msg).split())
+    return s if len(s) <= max_chars else (s[:max_chars] + " …")
+
+
+def _write_failure_log(root: Path, run_id: str, step: str, err: str) -> None:
+    d = root / "research_cycle_failures"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{run_id}_{step}.log"
+    p.write_text(err, encoding="utf-8")
+
+
 def run_research_cycle(config: str = "config/research/solusdc_research.json", discovery_config: str = "config/discovery/discovery_daily.json") -> tuple[bool, dict[str, Any]]:
     root = Path("artifacts")
     ok, msg = acquire_lock(root)
@@ -63,7 +77,15 @@ def run_research_cycle(config: str = "config/research/solusdc_research.json", di
         return True, {"ok": True, "state": "running", "step": "lock", "error": msg, "message": "research_cycle_already_running"}
 
     status_path = Path("artifacts/research_cycle_status.json")
-    status: dict[str, Any] = {"started_at": datetime.now(timezone.utc).isoformat(), "ok": False, "state": "running"}
+    run_id = uuid.uuid4().hex[:12]
+    status: dict[str, Any] = {
+        "run_id": run_id,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "ok": False,
+        "state": "running",
+        "steps": [],
+        "warning_count": 0,
+    }
     status_path.parent.mkdir(parents=True, exist_ok=True)
     status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
     try:
@@ -108,29 +130,44 @@ def run_research_cycle(config: str = "config/research/solusdc_research.json", di
         status.setdefault("warnings", [])
         for s in steps:
             c = s["cmd"]
+            t0 = datetime.now(timezone.utc)
             status.update({"current_step": s["name"], "current_cmd": c})
             status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
+            env = os.environ.copy()
+            env.setdefault("LOKY_MAX_CPU_COUNT", "4")
             try:
-                r = subprocess.run(c, capture_output=True, text=True, timeout=int(s["timeout"]))
+                r = subprocess.run(c, capture_output=True, text=True, timeout=int(s["timeout"]), env=env)
+                dt_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
             except subprocess.TimeoutExpired:
                 msg = f"step_timeout:{s['name']}"
+                dt_ms = int((datetime.now(timezone.utc) - t0).total_seconds() * 1000)
+                status["steps"].append({"name": s["name"], "ok": False, "duration_ms": dt_ms, "critical": bool(s["critical"]), "error": msg})
                 if s["critical"]:
-                    status.update({"ok": False, "state": "failed", "failed_cmd": c, "error": msg, "finished_at": datetime.now(timezone.utc).isoformat()})
+                    status.update({"ok": False, "state": "failed", "failed_cmd": c, "error": _compact_error(msg), "error_full": msg, "warning_count": len(status.get("warnings", [])), "finished_at": datetime.now(timezone.utc).isoformat()})
+                    _write_failure_log(root, run_id, s["name"], msg)
                     status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
                     return False, status
                 status["warnings"].append(msg)
+                status["warning_count"] = len(status["warnings"])
                 continue
 
             if r.returncode != 0:
                 err = (r.stderr or r.stdout or "failed").strip()
+                status["steps"].append({"name": s["name"], "ok": False, "duration_ms": dt_ms, "critical": bool(s["critical"]), "error": _compact_error(err)})
                 if s["critical"]:
-                    status.update({"ok": False, "state": "failed", "failed_cmd": c, "error": err, "finished_at": datetime.now(timezone.utc).isoformat()})
+                    status.update({"ok": False, "state": "failed", "failed_cmd": c, "error": _compact_error(err), "error_full": err, "warning_count": len(status.get("warnings", [])), "finished_at": datetime.now(timezone.utc).isoformat()})
+                    _write_failure_log(root, run_id, s["name"], err)
                     status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
                     return False, status
                 status["warnings"].append(f"{s['name']}:{err}")
+                status["warning_count"] = len(status["warnings"])
                 continue
+
+            status["steps"].append({"name": s["name"], "ok": True, "duration_ms": dt_ms, "critical": bool(s["critical"])})
+
         status["ok"] = True
         status["state"] = "idle"
+        status["warning_count"] = len(status.get("warnings", []))
         status["finished_at"] = datetime.now(timezone.utc).isoformat()
         status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
         return True, status

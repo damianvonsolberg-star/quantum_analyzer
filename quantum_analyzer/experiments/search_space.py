@@ -31,6 +31,11 @@ def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
             "regime_filters": regimes,
         }
     )
+    # bound runtime for continuous operator cycle
+    if preset == "fast":
+        candidate_grid = candidate_grid[:24]
+    elif preset == "daily":
+        candidate_grid = candidate_grid[:96]
 
     specs: list[ExperimentSpec] = []
     for w in windows:

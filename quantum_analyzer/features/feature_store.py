@@ -10,7 +10,8 @@ import pandas as pd
 
 from quantum_analyzer.datasets.catalog import load_dataset_frame
 from quantum_analyzer.features.build_features import build_feature_frame
-from quantum_analyzer.features.registry import feature_versions
+from quantum_analyzer.features.registry import feature_versions, registry_version_hash
+from quantum_analyzer.features.subsets import subsets_version_hash
 
 
 @dataclass
@@ -42,6 +43,8 @@ def build_feature_snapshot(
         "snapshot_id": sid,
         "timeframe": timeframe,
         "feature_versions": feature_versions(),
+        "registry_version_hash": registry_version_hash(),
+        "subsets_version_hash": subsets_version_hash(),
     }
 
     if mpath.exists() and fpath.exists():
@@ -54,6 +57,7 @@ def build_feature_snapshot(
 
     syms = snapshot_manifest.get("symbols", {})
     primary = syms.get("primary_trading_symbol", "SOLUSDC")
+    price_source_symbol = syms.get("price_source_symbol", primary)
     btc = syms.get("context_symbol", "BTCUSDT")
 
     sol = load_dataset_frame(data_root, "klines", "spot", primary, timeframe=timeframe)
@@ -65,6 +69,19 @@ def build_feature_snapshot(
     oi = load_dataset_frame(data_root, "open_interest", "futures", "SOLUSDT")
 
     feats = build_feature_frame(sol, btc_df, agg, book, funding, basis, oi)
+
+    # keep price series for downstream explorer/backtest close reference
+    if "open_time_ms" in sol.columns and "close" in sol.columns:
+        sol_ref = sol.sort_values("open_time_ms")
+        sol_idx = pd.to_datetime(sol_ref["open_time_ms"], unit="ms", utc=True)
+        if sol_ref["open_time_ms"].duplicated().any():
+            sol_ref = sol_ref.drop_duplicates(subset=["open_time_ms"], keep="last")
+            sol_idx = pd.to_datetime(sol_ref["open_time_ms"], unit="ms", utc=True)
+        close_s = pd.Series(sol_ref["close"].astype(float).values, index=sol_idx).sort_index()
+        if close_s.index.has_duplicates:
+            close_s = close_s.groupby(level=0, sort=True).last()
+        feats["close"] = close_s.reindex(feats.index, method="ffill").astype(float)
+
     feats = feats.reset_index().rename(columns={"index": "ts"})
     feats.to_parquet(fpath, index=False)
 
@@ -72,8 +89,14 @@ def build_feature_snapshot(
         **expected,
         "built_at": datetime.now(timezone.utc).isoformat(),
         "rows": int(len(feats)),
+        "symbols": {
+            "trading_symbol": primary,
+            "price_source_symbol": price_source_symbol,
+            "context_symbol": btc,
+        },
         "built_from": {
             "primary": primary,
+            "price_source_symbol": price_source_symbol,
             "context": btc,
         },
     }

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from quantum_analyzer.features.registry import DEFAULT_FEATURE_REGISTRY
 
 
@@ -21,3 +24,9 @@ def resolve_feature_subset(name: str, registry: dict[str, object] | None = None)
     if missing:
         raise ValueError(f"Subset {name} has unknown features: {missing}")
     return cols
+
+
+def subsets_version_hash() -> str:
+    payload = {k: FEATURE_SUBSETS[k] for k in sorted(FEATURE_SUBSETS)}
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
