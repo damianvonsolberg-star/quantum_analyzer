@@ -194,22 +194,16 @@ class ArtifactAdapter:
             if missing:
                 raise AdapterValidationError(f"schema v2 proposal missing required fields: {', '.join(missing)}")
 
-            timestamp = str(p.get("timestamp") or "")
-            # guard against malformed numeric timestamps from intermediate artifacts
+            # UI freshness should reflect artifact production freshness, not market-bar timestamp.
+            meta_ts = (bundle_v2.get("artifact_meta", {}) or {}).get("produced_at")
+            drift_ts = (bundle_v2.get("drift", {}).get("timestamps", {}) or {}).get("as_of") if isinstance(bundle_v2.get("drift"), dict) else None
+            proposal_ts = str(p.get("timestamp") or "")
+            timestamp = str(meta_ts or drift_ts or proposal_ts)
+
             ts_ok = False
             if timestamp:
                 try:
                     _ = pd.to_datetime(timestamp, utc=True, errors="raise")
-                    ts_ok = True
-                except Exception:
-                    ts_ok = False
-            if not ts_ok:
-                meta_ts = (bundle_v2.get("artifact_meta", {}) or {}).get("produced_at")
-                drift_ts = (bundle_v2.get("drift", {}).get("timestamps", {}) or {}).get("as_of") if isinstance(bundle_v2.get("drift"), dict) else None
-                cand = str(meta_ts or drift_ts or "")
-                try:
-                    _ = pd.to_datetime(cand, utc=True, errors="raise")
-                    timestamp = cand
                     ts_ok = True
                 except Exception:
                     ts_ok = False
