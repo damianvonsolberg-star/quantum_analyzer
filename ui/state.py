@@ -63,7 +63,7 @@ def persist_artifact_dir(path: str) -> None:
         pass
 
 
-def _latest_operator_artifact_hint() -> str | None:
+def latest_operator_artifact_dir() -> str | None:
     # 1) explicit advise_now doctor path (if present)
     p = ROOT / "artifacts" / "explorer" / "advise_now_status.json"
     if p.exists():
@@ -83,7 +83,10 @@ def _latest_operator_artifact_hint() -> str | None:
         try:
             dirs = [x for x in exp_root.iterdir() if x.is_dir() and (x / "artifact_bundle.json").exists()]
             if dirs:
-                newest = sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)[0]
+                # Prefer fully-populated runs (actions+equity) for consistent UI pages.
+                rich = [d for d in dirs if (d / "actions.csv").exists() and (d / "equity_curve.csv").exists()]
+                pool = rich if rich else dirs
+                newest = sorted(pool, key=lambda d: d.stat().st_mtime, reverse=True)[0]
                 return str(newest)
         except Exception:
             pass
@@ -94,7 +97,7 @@ def _latest_operator_artifact_hint() -> str | None:
 def init_state() -> None:
     cfg = UIConfig()
     persisted = load_persisted_artifact_dir()
-    hint = _latest_operator_artifact_hint()
+    hint = latest_operator_artifact_dir()
     default_artifacts = hint or persisted or _resolve_default_artifact_dir(cfg)
 
     # Always prioritize latest operator hint to avoid getting stuck on stale persisted dirs.

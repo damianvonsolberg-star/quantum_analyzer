@@ -11,7 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import ArtifactAdapter
-from ui.state import persist_artifact_dir
+from ui.state import latest_operator_artifact_dir, persist_artifact_dir
 
 
 CSS = """
@@ -124,6 +124,13 @@ def apply_theme() -> None:
 
 def sidebar_controls() -> None:
     st.sidebar.header("Quantum Analyzer")
+
+    # Always follow newest valid operator artifact dir to avoid stale pinned sessions.
+    latest = latest_operator_artifact_dir()
+    if latest and st.session_state.get("artifact_dir") != latest:
+        st.session_state["artifact_dir"] = latest
+        persist_artifact_dir(latest)
+
     st.session_state["artifact_dir"] = st.sidebar.text_input("Artifact directory", st.session_state["artifact_dir"])
     persist_artifact_dir(st.session_state["artifact_dir"])
     st.session_state["wallet_address"] = st.sidebar.text_input("Wallet address (BENCHMARK_WALLET)", st.session_state["wallet_address"])
