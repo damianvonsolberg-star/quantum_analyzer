@@ -1,0 +1,15 @@
+{
+  "discovery": {
+    "enabled": true,
+    "methods": ["bruteforce", "random", "evolutionary"],
+    "max_expression_depth": 4,
+    "max_rule_terms": 6,
+    "novelty_min_distance": 0.15,
+    "complexity_penalty": 0.10,
+    "min_oos_support": 40,
+    "min_neighbor_stability": 0.60,
+    "min_cross_window_stability": 0.60,
+    "random_n": 60,
+    "evolution_generations": 2
+  }
+}

@@ -93,7 +93,8 @@ UI should not crash on partial diagnostics.
 - **Templates**: matched archetypes and “Why now?” explanation
 - **Drift & Governance**: OK/WATCH/HALT trust status and operator response
 - **Journal**: manual fills tracker (sqlite), realized/unrealized PnL, reconciliation
-- **Explorer**: one-click preset scan, leaderboard, and promoted signal bundle
+- **Explorer**: one-click preset scan, leaderboard, promoted signal bundle, research cycle status
+- **Discovery**: surviving/rejected discovered signals, novelty/complexity, genealogy summary
 
 ---
 
@@ -107,6 +108,11 @@ make test-ui
 Explorer tests:
 ```bash
 make test-explorer
+```
+
+Research cycle tests:
+```bash
+make test-research
 ```
 
 Run explorer presets:

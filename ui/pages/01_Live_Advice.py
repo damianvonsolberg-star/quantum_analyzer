@@ -14,7 +14,7 @@ from ui.adapters import AdapterValidationError, ArtifactAdapter
 from ui.components import artifact_banner, render_headline_card, render_soft_card, sidebar_controls
 from ui.portfolio import advice_from_target, build_portfolio_snapshot
 from ui.recommendation import decide_recommendation
-from ui.state import init_state
+from ui.state import init_state, load_json
 from ui.view_models import UiPortfolioSnapshot
 from ui.wallet import (
     WalletFetchError,
@@ -32,6 +32,21 @@ init_state()
 sidebar_controls()
 st.title("Live Advice · Decision Desk")
 artifact_banner()
+
+cycle = load_json(Path("artifacts/research_cycle_status.json"))
+if isinstance(cycle, dict):
+    state = str(cycle.get("state", "unknown")).lower()
+    step = cycle.get("current_cmd")
+    if isinstance(step, list) and step:
+        step_txt = " ".join(str(x) for x in step[:4])
+    else:
+        step_txt = "idle"
+    if state == "running":
+        st.info(f"Research cycle: RUNNING · {step_txt}")
+    elif state == "failed":
+        st.warning(f"Research cycle: FAILED · {cycle.get('error', 'unknown_error')}")
+    else:
+        st.caption(f"Research cycle: {state.upper()} · last finish: {cycle.get('finished_at', 'n/a')}")
 
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])
 
@@ -259,6 +274,15 @@ st.markdown("**Top 3 reasons:** " + (", ".join(rec.top_reasons[:3]) if rec.top_r
 st.markdown("**Top 3 risks:** " + (", ".join(rec.top_risks[:3]) if rec.top_risks else "n/a"))
 st.markdown(f"**What would change the light:** {rec.what_changes_light}")
 
+st.markdown("**Top alternatives (why they lost):**")
+if ui_advice.top_alternatives:
+    for a in ui_advice.top_alternatives[:3]:
+        st.markdown(f"- {a}")
+else:
+    st.markdown("- n/a")
+
+st.markdown("**Invalidation notes:** " + (", ".join(ui_advice.invalidation_notes[:3]) if ui_advice.invalidation_notes else "n/a"))
+
 def _freshness_badge(ts_str: str | None, label: str) -> str:
     if not ts_str:
         return f"🔴 {label}: missing"
@@ -266,9 +290,15 @@ def _freshness_badge(ts_str: str | None, label: str) -> str:
         t = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
         now = datetime.now(timezone.utc)
         age_min = (now - t).total_seconds() / 60.0
-        if age_min <= 180:
+
+        # freshness should follow configured research cadence, not fixed legacy windows
+        cycle_min = int(st.session_state.get("research_cycle_minutes", 15) or 15)
+        fresh_cut = max(5, cycle_min * 2)
+        stale_cut = max(fresh_cut + 1, cycle_min * 4)
+
+        if age_min <= fresh_cut:
             return f"🟢 {label}: fresh ({age_min:.0f}m)"
-        if age_min <= 360:
+        if age_min <= stale_cut:
             return f"🟡 {label}: stale ({age_min:.0f}m)"
         return f"🔴 {label}: very stale ({age_min:.0f}m)"
     except Exception:

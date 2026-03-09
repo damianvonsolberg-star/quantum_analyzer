@@ -128,6 +128,9 @@ def sidebar_controls() -> None:
     persist_artifact_dir(st.session_state["artifact_dir"])
     st.session_state["wallet_address"] = st.sidebar.text_input("Wallet address (BENCHMARK_WALLET)", st.session_state["wallet_address"])
     st.session_state["rpc_url"] = st.sidebar.text_input("Solana RPC URL (SOL_RPC_URL)", st.session_state["rpc_url"])
+    st.session_state["live_ticker_seconds"] = st.sidebar.number_input("Ticker refresh (sec)", min_value=2, max_value=60, value=int(st.session_state.get("live_ticker_seconds", 5)))
+    st.session_state["research_cycle_minutes"] = st.sidebar.number_input("Research cycle cadence (min)", min_value=2, max_value=240, value=int(st.session_state.get("research_cycle_minutes", 15)))
+    st.session_state["discovery_cycle_minutes"] = st.sidebar.number_input("Discovery cadence (min)", min_value=5, max_value=720, value=int(st.session_state.get("discovery_cycle_minutes", 60)))
     if st.sidebar.button("Refresh now"):
         st.rerun()
 

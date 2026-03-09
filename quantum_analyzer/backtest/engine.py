@@ -11,11 +11,16 @@ import pandas as pd
 
 from quantum_analyzer.backtest.diagnostics import (
     BacktestDiagnostics,
+    action_consistency,
+    action_quality_metrics,
     calibration_proxy,
     expectancy_by_template,
     export_diagnostics_bundle,
     hit_rate_by_state,
     max_drawdown,
+    performance_by_bucket,
+    rolling_performance,
+    turnover_cost_sensitivity,
 )
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig, purged_walkforward_splits
 from quantum_analyzer.forecast.mixture import build_forecast_bundle
@@ -24,6 +29,7 @@ from quantum_analyzer.policy.risk_caps import DrawdownState, RegimeCaps
 from quantum_analyzer.policy.target_position import PolicyInputs, propose_action
 from quantum_analyzer.contracts import ARTIFACT_SCHEMA_V2
 from quantum_analyzer.state.latent_model import GaussianHMMBaseline
+from quantum_analyzer.strategies.base import CandidateStrategy
 
 
 @dataclass
@@ -55,6 +61,7 @@ def run_backtest(
     wf_cfg: WalkForwardConfig,
     bt_cfg: BacktestConfig,
     out_dir: str | Path | None = None,
+    candidate_strategy: CandidateStrategy | None = None,
 ) -> BacktestResult:
     features = features.copy().sort_index()
     close = close.reindex(features.index).astype(float)
@@ -77,6 +84,23 @@ def run_backtest(
         model = GaussianHMMBaseline(n_states=10, random_state=7).fit(X_train)
         beliefs = model.predict_state_beliefs(X_test, symbol=bt_cfg.symbol)
 
+        score_series = None
+        action_series = None
+        candidate_id = "policy_baseline"
+        candidate_family = "policy"
+        if candidate_strategy is not None:
+            candidate_id = candidate_strategy.candidate_id
+            candidate_family = candidate_strategy.family
+            test_feats = features.iloc[test_idx]
+            try:
+                score_series = candidate_strategy.generate_scores(test_feats)
+            except Exception:
+                score_series = pd.Series(0.0, index=test_feats.index)
+            try:
+                action_series = candidate_strategy.propose_actions(test_feats)
+            except Exception:
+                action_series = pd.Series("HOLD", index=test_feats.index)
+
         for i_local, b in enumerate(beliefs):
             i = test_idx[i_local]
             if i >= len(close) - 1:
@@ -87,22 +111,43 @@ def run_backtest(
             px_next = float(close.iloc[i + 1])
             ret_next = px_next / px - 1.0
 
-            forecast = build_forecast_bundle(bt_cfg.symbol, b, templates, calibration_score=0.7)
             regime = _pick_regime_name(b.regime_probabilities)
 
-            ap = propose_action(
-                PolicyInputs(
-                    forecast=forecast,
-                    estimated_round_trip_cost_bps=bt_cfg.round_trip_cost_bps,
-                    current_position=position,
-                    regime=regime,
-                    drawdown_state=DrawdownState(drawdown_pct=0.0),
-                    regime_caps=RegimeCaps(),
-                    turnover_cap=bt_cfg.turnover_cap,
+            if candidate_strategy is None:
+                dyn_calib = float(max(0.0, 1.0 - min(1.0, b.entropy)))
+                forecast = build_forecast_bundle(bt_cfg.symbol, b, templates, calibration_score=dyn_calib)
+                ap = propose_action(
+                    PolicyInputs(
+                        forecast=forecast,
+                        estimated_round_trip_cost_bps=bt_cfg.round_trip_cost_bps,
+                        current_position=position,
+                        regime=regime,
+                        drawdown_state=DrawdownState(drawdown_pct=0.0),
+                        regime_caps=RegimeCaps(),
+                        turnover_cap=bt_cfg.turnover_cap,
+                    )
                 )
-            )
+                target = float(ap.target_position)
+                action_label = str(ap.action)
+                edge_bps = float(ap.expected_edge_bps)
+                reason = str(ap.reason)
+                p_up = float(forecast.distributions.get("h36").quantiles.get("p_up", np.nan)) if "h36" in forecast.distributions else np.nan
+            else:
+                ts = features.index[i]
+                raw_score = float(score_series.loc[ts]) if score_series is not None and ts in score_series.index else 0.0
+                action_label = str(action_series.loc[ts]) if action_series is not None and ts in action_series.index else "HOLD"
+                if action_label == "BUY":
+                    target = 1.0
+                elif action_label == "REDUCE":
+                    target = max(0.0, position - bt_cfg.turnover_cap)
+                elif action_label == "WAIT":
+                    target = position
+                else:
+                    target = position
+                edge_bps = float(raw_score * 100.0)
+                reason = f"{candidate_family} candidate signal"
+                p_up = float(np.clip(0.5 + 0.5 * np.tanh(raw_score), 0.0, 1.0))
 
-            target = float(ap.target_position)
             # enforce per-bar turnover again (defensive)
             delta = np.clip(target - position, -bt_cfg.turnover_cap, bt_cfg.turnover_cap)
             new_position = position + delta
@@ -113,9 +158,6 @@ def run_backtest(
             equity = equity + pnl
             position = new_position
 
-            # attach template used for diagnostics (best by expectancy)
-            template_id = templates[0].template_id if templates else "none"
-
             eq_rows.append(
                 {
                     "ts": close.index[i + 1],
@@ -125,20 +167,33 @@ def run_backtest(
                     "position": position,
                 }
             )
+            # volatility / BTC regime buckets for diagnostics
+            rv = float(features.iloc[i].get("realized_vol_24h", np.nan)) if i < len(features) else np.nan
+            if np.isnan(rv):
+                vol_bucket = "unknown"
+            else:
+                vol_bucket = "low" if rv < 0.02 else ("mid" if rv < 0.05 else "high")
+            btc_sig = float(features.iloc[i].get("btc_return_1h", 0.0)) if i < len(features) else 0.0
+            btc_regime = "btc_up" if btc_sig > 0 else ("btc_down" if btc_sig < 0 else "btc_flat")
+
             act_rows.append(
                 {
                     "ts": close.index[i],
-                    "action": ap.action,
-                    "target_position": ap.target_position,
-                    "expected_edge_bps": ap.expected_edge_bps,
-                    "expected_cost_bps": ap.expected_cost_bps,
-                    "reason": ap.reason,
+                    "action": action_label,
+                    "candidate_id": candidate_id,
+                    "candidate_family": candidate_family,
+                    "target_position": target,
+                    "expected_edge_bps": edge_bps,
+                    "expected_cost_bps": bt_cfg.round_trip_cost_bps,
+                    "reason": reason,
                     "state": regime,
-                    "template_id": template_id,
-                    "p_up": forecast.distributions["h36"].quantiles.get("p_up", np.nan),
+                    "template_id": candidate_id,
+                    "p_up": p_up,
                     "realized_up": 1 if ret_next > 0 else 0,
                     "turnover_abs": abs(delta),
                     "pnl": pnl,
+                    "vol_bucket": vol_bucket,
+                    "btc_regime": btc_regime,
                 }
             )
 
@@ -152,6 +207,14 @@ def run_backtest(
     turnover = float(act_df.get("turnover_abs", pd.Series(dtype=float)).sum()) if not act_df.empty else 0.0
     mdd = max_drawdown(eq_df["equity"]) if not eq_df.empty else 0.0
 
+    aq = action_quality_metrics(act_df.reset_index()) if not act_df.empty else {}
+    perf_vol = performance_by_bucket(act_df.reset_index(), "vol_bucket") if not act_df.empty else {}
+    perf_btc = performance_by_bucket(act_df.reset_index(), "btc_regime") if not act_df.empty else {}
+    perf_family = performance_by_bucket(act_df.reset_index(), "candidate_family") if not act_df.empty else {}
+    roll = rolling_performance(eq_df["equity"] if not eq_df.empty else pd.Series(dtype=float))
+    consistency = action_consistency(act_df.reset_index()) if not act_df.empty else 0.0
+    sens = turnover_cost_sensitivity(act_df.reset_index()) if not act_df.empty else {"turnover": 0.0, "cost_proxy": 0.0}
+
     diag = BacktestDiagnostics(
         calibration_proxy=cal,
         hit_rate_by_state=hr,
@@ -159,6 +222,13 @@ def run_backtest(
         action_rate=action_rate,
         turnover=turnover,
         max_drawdown=mdd,
+        action_quality=aq,
+        performance_by_vol_bucket=perf_vol,
+        performance_by_btc_regime=perf_btc,
+        performance_by_family=perf_family,
+        rolling_performance=roll,
+        action_consistency=consistency,
+        turnover_cost_sensitivity=sens,
     )
 
     summary = {
@@ -220,6 +290,8 @@ def run_backtest(
                         "walkforward": wf_cfg.__dict__,
                         "backtest": bt_cfg.__dict__,
                         "template_count": len(templates),
+                        "candidate_id": (candidate_strategy.candidate_id if candidate_strategy is not None else "policy_baseline"),
+                        "candidate_family": (candidate_strategy.family if candidate_strategy is not None else "policy"),
                     },
                 },
                 f,

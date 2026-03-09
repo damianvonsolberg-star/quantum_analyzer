@@ -1,0 +1,26 @@
+{
+  "research": {
+    "data_root": "data/binance",
+    "primary_symbol": "SOLUSDC",
+    "price_source_symbol": "SOLUSDT",
+    "context_symbols": ["BTCUSDC", "BTCUSDT"],
+    "symbols": ["SOLUSDC", "SOLUSDT", "BTCUSDC", "BTCUSDT"],
+    "symbols_cycle": ["SOLUSDC", "BTCUSDC"],
+    "optional_proxies": {
+      "gold": {"enabled": false},
+      "dxy": {"enabled": false},
+      "btc_dominance": {"enabled": true},
+      "total_crypto_market": {"enabled": true}
+    },
+    "timeframes": ["5m", "15m", "1h", "4h", "1d", "1w"],
+    "timeframes_cycle": ["1h"],
+    "explorer_timeframe": "1h",
+    "feature_subset": "full_stack",
+    "backfill_days": 2,
+    "backfill_days_cycle": 0.1,
+    "snapshot": {
+      "min_coverage_ratio": 0.95,
+      "max_gap_ratio": 0.01
+    }
+  }
+}

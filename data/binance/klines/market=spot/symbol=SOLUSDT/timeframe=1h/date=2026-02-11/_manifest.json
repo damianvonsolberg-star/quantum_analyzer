@@ -1,0 +1,40 @@
+{
+  "dataset": "klines",
+  "market": "spot",
+  "symbol": "SOLUSDT",
+  "timeframe": "1h",
+  "date": "2026-02-11",
+  "updated_at": "2026-03-08T22:54:23.975698+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-08T22:48:09.405279+00:00",
+      "file": "part-20260308T224809402928Z-bf6a6188.parquet",
+      "rows": 24,
+      "checksum_sha256": "87ab299ef43e91396c7812e9860bbb18c0dfb68f3d695be1714e247481dca1ba",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:54:23.975685+00:00",
+      "file": "part-20260308T225423974299Z-13e0f766.parquet",
+      "rows": 24,
+      "checksum_sha256": "1692b80764dd0cf8eb780e6a70ac648865c285ce1a1b96829118811d3c388ba6",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    }
+  ],
+  "totals": {
+    "files": 2,
+    "rows": 48
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1770768000000,
+    "max_source_ts_ms": 1770850800000
+  }
+}

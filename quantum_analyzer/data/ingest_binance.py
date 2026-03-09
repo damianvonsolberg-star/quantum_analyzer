@@ -22,6 +22,8 @@ INTERVAL_MS = {
     "15m": 900_000,
     "1h": 3_600_000,
     "4h": 14_400_000,
+    "1d": 86_400_000,
+    "1w": 604_800_000,
 }
 
 
@@ -277,6 +279,8 @@ def backfill_range(
 
     for symbol in symbols:
         for interval in intervals:
+            if interval not in INTERVAL_MS:
+                raise ValueError(f"Unsupported interval: {interval}")
             klines = client.fetch_klines(symbol, interval, start_ms, end_ms)
             files = write_partitioned_parquet(
                 rows=klines,

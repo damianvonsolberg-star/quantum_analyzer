@@ -224,6 +224,8 @@ class ArtifactAdapter:
                 reasons=reasons,
                 advisory_mode=str(p.get("advisory_mode", "spot_only")),
                 target_scope=str(p.get("target_scope", "advisory_sleeve")),
+                top_alternatives=(p.get("controls", {}) or {}).get("top_alternatives", []),
+                invalidation_notes=(p.get("controls", {}) or {}).get("invalidation_reasons", []),
             )
 
         # legacy fallback path
@@ -294,6 +296,8 @@ class ArtifactAdapter:
             return_pct=float(summary["return_pct"]) if "return_pct" in summary else None,
             max_drawdown=float(diag["max_drawdown"]) if "max_drawdown" in diag else None,
             schema_version=(bundle_v2.get("schema_version") if bundle_v2 else summary.get("schema_version")),
+            discovery_survivors=(int(summary.get("discovery_survivors")) if summary.get("discovery_survivors") is not None else None),
+            discovery_rejected=(int(summary.get("discovery_rejected")) if summary.get("discovery_rejected") is not None else None),
             raw=summary,
         )
 

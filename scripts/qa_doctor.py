@@ -154,6 +154,38 @@ def validate_artifacts(artifacts_dir: Path) -> DoctorReport:
             report.missing_files.append(fn)
             report.hard_failures.append(f"Missing required artifact: {fn}")
 
+    # snapshot/feature manifest checks (explorer-level provenance)
+    snap_manifest_path = artifacts_dir / "snapshot_manifest.json"
+    feat_manifest_path = artifacts_dir / "feature_manifest.json"
+    if snap_manifest_path.exists():
+        sm = _read_json(snap_manifest_path)
+        if not isinstance(sm, dict) or not sm.get("snapshot_id"):
+            report.hard_failures.append("snapshot_manifest.json malformed or missing snapshot_id")
+    else:
+        report.warnings.append("snapshot_manifest.json missing")
+
+    if feat_manifest_path.exists():
+        fm = _read_json(feat_manifest_path)
+        if not isinstance(fm, dict) or not fm.get("snapshot_id"):
+            report.hard_failures.append("feature_manifest.json malformed or missing snapshot_id")
+        if isinstance(fm, dict):
+            rows = fm.get("rows")
+            if rows is None or int(rows) <= 0:
+                report.hard_failures.append("feature_manifest.json indicates empty feature snapshot")
+            if not isinstance(fm.get("feature_versions"), dict) or not fm.get("feature_versions"):
+                report.hard_failures.append("feature_manifest.json missing feature_versions")
+        if isinstance(fm, dict) and isinstance(sm := (_read_json(snap_manifest_path) if snap_manifest_path.exists() else None), dict):
+            if fm.get("snapshot_id") != sm.get("snapshot_id"):
+                report.hard_failures.append("feature/snapshot manifest snapshot_id mismatch")
+            sm_built = sm.get("built_at")
+            fm_built = fm.get("built_at")
+            if not fm_built:
+                report.warnings.append("feature_manifest.json missing built_at")
+            elif sm_built and str(fm_built) < str(sm_built):
+                report.hard_failures.append("feature store appears older than snapshot manifest")
+    else:
+        report.warnings.append("feature_manifest.json missing")
+
     # optional templates
     has_optional = any((artifacts_dir / fn).exists() for fn in OPTIONAL_ANY)
     if not has_optional:

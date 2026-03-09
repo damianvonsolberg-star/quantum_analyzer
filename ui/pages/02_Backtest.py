@@ -30,6 +30,7 @@ st.set_page_config(page_title="Backtest", layout="wide")
 init_state()
 sidebar_controls()
 st.title("Backtest · Performance Lab")
+st.caption("Advanced diagnostics are below; headline advisory remains on Live Advice.")
 artifact_banner()
 
 adapter = ArtifactAdapter(st.session_state["artifact_dir"])

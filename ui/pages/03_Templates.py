@@ -20,6 +20,7 @@ st.set_page_config(page_title="Templates", layout="wide")
 init_state()
 sidebar_controls()
 st.title("Templates · Regime Lens")
+st.caption("Template diagnostics support advisory reasoning; no execution path.")
 st.caption("Which historical path archetypes does the market currently resemble?")
 artifact_banner()
 

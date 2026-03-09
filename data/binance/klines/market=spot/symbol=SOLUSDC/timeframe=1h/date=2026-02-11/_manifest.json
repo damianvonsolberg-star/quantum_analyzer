@@ -1,0 +1,73 @@
+{
+  "dataset": "klines",
+  "market": "spot",
+  "symbol": "SOLUSDC",
+  "timeframe": "1h",
+  "date": "2026-02-11",
+  "updated_at": "2026-03-08T22:43:24.707322+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-08T22:29:02.467198+00:00",
+      "file": "part-20260308T222902465401Z-7772c511.parquet",
+      "rows": 24,
+      "checksum_sha256": "2a633185ede34a33eca105264b8a79607ffc6a19abd33efada9ca4c4673d0004",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:32:54.943019+00:00",
+      "file": "part-20260308T223254941239Z-e1389513.parquet",
+      "rows": 24,
+      "checksum_sha256": "9f2e7477434f595e2760ab1b2b07a69c9d1539ba46697a38671f04bd7d131a1f",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:36:50.380260+00:00",
+      "file": "part-20260308T223650377930Z-f38959a4.parquet",
+      "rows": 24,
+      "checksum_sha256": "198aa5903bf066496e803109c4a810ed5177ddff992ff1dc7bcc01e36d73d17e",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:40:01.076733+00:00",
+      "file": "part-20260308T224001075162Z-83e63e7d.parquet",
+      "rows": 24,
+      "checksum_sha256": "00634497c90f683a229e2ac7dd715a21e2c920e34f85e8dd6f7923ee3a95deaf",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:43:24.707299+00:00",
+      "file": "part-20260308T224324705582Z-e61ed71e.parquet",
+      "rows": 24,
+      "checksum_sha256": "db8ed0a3dfee187b609e9769e54ca960bd3d0b1f5f10cfcf7127183a3d92122b",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1770768000000,
+        "max_source_ts_ms": 1770850800000
+      }
+    }
+  ],
+  "totals": {
+    "files": 5,
+    "rows": 120
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1770768000000,
+    "max_source_ts_ms": 1770850800000
+  }
+}

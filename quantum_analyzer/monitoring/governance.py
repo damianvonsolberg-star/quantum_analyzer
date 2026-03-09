@@ -26,6 +26,7 @@ class GovernancePayload:
     state_occupancy_drift: float = 0.0
     action_rate_drift: float = 0.0
     cost_drift_bps: float = 0.0
+    signal_decay_status: str = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +40,7 @@ class GovernancePayload:
             "state_occupancy_drift": float(self.state_occupancy_drift),
             "action_rate_drift": float(self.action_rate_drift),
             "cost_drift_bps": float(self.cost_drift_bps),
+            "signal_decay_status": self.signal_decay_status,
         }
 
 
@@ -78,6 +80,7 @@ def evaluate_governance(
     artifact_timestamp: str | None,
     data_timestamp: str | None,
     th: DriftThresholds,
+    signal_decay_status: str = "unknown",
 ) -> GovernancePayload:
     artifact_staleness = _staleness_label(artifact_timestamp)
     data_staleness = _staleness_label(data_timestamp)
@@ -95,6 +98,8 @@ def evaluate_governance(
         reasons.append("cost_drift_breach")
     if calibration_drift > th.max_calibration_drift:
         reasons.append("calibration_drift_breach")
+    if signal_decay_status == "retire":
+        reasons.append("signal_decay_retire")
 
     kill_switch = len(reasons) > 0
 
@@ -120,6 +125,7 @@ def evaluate_governance(
         state_occupancy_drift=state_drift,
         action_rate_drift=action_rate_drift,
         cost_drift_bps=cost_drift_bps,
+        signal_decay_status=signal_decay_status,
     )
 
 

@@ -36,7 +36,15 @@ def run_explorer_preset(preset: str, root: str | Path) -> tuple[bool, str]:
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text("running", encoding="utf-8")
     try:
-        cmd = ["python3", "scripts/run_explorer.py", "--preset", preset, "--artifacts-root", str(p["root"])]
+        cmd = [
+            "python3",
+            "scripts/run_explorer.py",
+            "--preset",
+            preset,
+            "--build-snapshot",
+            "--artifacts-root",
+            str(p["root"]),
+        ]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             return False, (r.stderr or r.stdout or "explorer_failed").strip()
@@ -74,7 +82,28 @@ def run_advise_now(explorer_root: str | Path, artifacts_dir: str | Path, governa
     p = explorer_paths(explorer_root)
     ok1, msg1 = run_explorer_preset("fast", explorer_root)
     if not ok1:
-        return False, {"step": "explorer", "error": msg1}
+        # self-heal once for missing BTC context/local data bootstrap
+        msg_txt = str(msg1)
+        if "No BTC context symbol found" in msg_txt:
+            upd = subprocess.run(
+                ["python3", "scripts/update_market_data.py", "--config", "config/research/solusdc_research.json"],
+                capture_output=True,
+                text=True,
+            )
+            if upd.returncode == 0:
+                ok1b, msg1b = run_explorer_preset("fast", explorer_root)
+                if not ok1b:
+                    return False, {"step": "explorer", "error": msg1b, "auto_recovered": False}
+                ok1 = True
+            else:
+                return False, {
+                    "step": "explorer",
+                    "error": msg1,
+                    "auto_recovered": False,
+                    "bootstrap_update_error": (upd.stderr or upd.stdout or "update_market_data_failed").strip(),
+                }
+        else:
+            return False, {"step": "explorer", "error": msg1}
 
     ok2, msg2 = run_promotion(explorer_root, governance_status=governance_status)
     if not ok2:

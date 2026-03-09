@@ -75,6 +75,8 @@ class ActionProposal(SerializableContract):
     # explicit advisory semantics (for operator-facing mapping)
     advisory_mode: str = "spot_only"  # spot_only | derivatives_capable
     target_scope: str = "advisory_sleeve"  # advisory_sleeve | whole_wallet
+    candidate_id: str = ""
+    candidate_family: str = ""
 
 
 @dataclass
@@ -110,6 +112,16 @@ class ArtifactBundleV2(SerializableContract):
 
 
 @dataclass
+class DiscoverySignal(SerializableContract):
+    candidate_id: str
+    genome: dict[str, Any]
+    method: str
+    novelty: float
+    complexity_penalty: float
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class PromotedSignalBundle(SerializableContract):
     status: str
     action: str
@@ -118,4 +130,6 @@ class PromotedSignalBundle(SerializableContract):
     reason: str
     action_masses: dict[str, float] = field(default_factory=dict)
     invalidation_reasons: list[str] = field(default_factory=list)
+    top_alternatives: list[dict[str, Any]] = field(default_factory=list)
+    supporting_metrics: dict[str, Any] = field(default_factory=dict)
     source: dict[str, Any] = field(default_factory=dict)

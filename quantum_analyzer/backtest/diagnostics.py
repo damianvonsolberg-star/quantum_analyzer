@@ -17,6 +17,13 @@ class BacktestDiagnostics:
     action_rate: float
     turnover: float
     max_drawdown: float
+    action_quality: dict[str, dict[str, float]] | None = None
+    performance_by_vol_bucket: dict[str, float] | None = None
+    performance_by_btc_regime: dict[str, float] | None = None
+    performance_by_family: dict[str, float] | None = None
+    rolling_performance: dict[str, float] | None = None
+    action_consistency: float | None = None
+    turnover_cost_sensitivity: dict[str, float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -54,6 +61,61 @@ def expectancy_by_template(template_ids: pd.Series, pnl: pd.Series) -> dict[str,
     for tid, g in tmp.groupby("template"):
         out[str(tid)] = float(g["pnl"].mean()) if len(g) else 0.0
     return out
+
+
+def action_quality_metrics(actions: pd.DataFrame) -> dict[str, dict[str, float]]:
+    if actions is None or actions.empty:
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    d = actions.copy()
+    for a in ["BUY", "HOLD", "REDUCE", "WAIT"]:
+        g = d[d["action"].astype(str).str.upper() == a]
+        if g.empty:
+            out[a] = {"count": 0.0, "hit_rate": 0.0, "avg_pnl": 0.0}
+        else:
+            out[a] = {
+                "count": float(len(g)),
+                "hit_rate": float((g.get("pnl", pd.Series(dtype=float)) > 0).mean()),
+                "avg_pnl": float(g.get("pnl", pd.Series(dtype=float)).mean()),
+            }
+    return out
+
+
+def performance_by_bucket(actions: pd.DataFrame, bucket_col: str) -> dict[str, float]:
+    if actions is None or actions.empty or bucket_col not in actions.columns:
+        return {}
+    d = actions[[bucket_col, "pnl"]].dropna()
+    if d.empty:
+        return {}
+    return {str(k): float(v["pnl"].mean()) for k, v in d.groupby(bucket_col)}
+
+
+def rolling_performance(equity: pd.Series, window: int = 24) -> dict[str, float]:
+    if equity is None or equity.empty:
+        return {}
+    r = equity.pct_change().fillna(0.0)
+    rr = r.rolling(window).mean()
+    return {
+        "rolling_mean_return": float(rr.iloc[-1]) if len(rr) else 0.0,
+        "rolling_std_return": float(r.rolling(window).std().iloc[-1]) if len(r) else 0.0,
+    }
+
+
+def action_consistency(actions: pd.DataFrame) -> float:
+    if actions is None or actions.empty or "action" not in actions.columns:
+        return 0.0
+    a = actions["action"].astype(str).tolist()
+    if len(a) < 2:
+        return 1.0
+    switches = sum(1 for i in range(1, len(a)) if a[i] != a[i - 1])
+    return float(1.0 - (switches / (len(a) - 1)))
+
+
+def turnover_cost_sensitivity(actions: pd.DataFrame) -> dict[str, float]:
+    if actions is None or actions.empty:
+        return {"turnover": 0.0, "cost_proxy": 0.0}
+    t = float(actions.get("turnover_abs", pd.Series(dtype=float)).sum())
+    return {"turnover": t, "cost_proxy": t * 0.5}
 
 
 def export_diagnostics_bundle(

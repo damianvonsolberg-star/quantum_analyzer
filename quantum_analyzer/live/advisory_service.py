@@ -99,11 +99,18 @@ def run_advisory(
             score=conf,
             size_fraction=abs(target),
             target_position=target,
-            expected_edge_bps=0.0,
+            expected_edge_bps=float(promoted.get("supporting_metrics", {}).get("expectancy", 0.0) or 0.0),
             expected_cost_bps=0.0,
             reason=str(promoted.get("reason", "promoted_signal")),
             advisory_mode="spot_only",
             target_scope="advisory_sleeve",
+            candidate_id=str((promoted.get("supporting_metrics", {}) or {}).get("supporting_metrics", {}).get("candidate_id", "")),
+            candidate_family=str((promoted.get("supporting_metrics", {}) or {}).get("supporting_metrics", {}).get("candidate_family", "")),
+            controls={
+                "top_alternatives": promoted.get("top_alternatives", []),
+                "invalidation_reasons": promoted.get("invalidation_reasons", []),
+                "supporting_metrics": promoted.get("supporting_metrics", {}),
+            },
         )
         forecast = ForecastBundle(ts=now, symbol="SOLUSDT", distributions={}, diagnostics={"source": "promoted_signal_bundle", "confidence": conf})
         gov_status = "OK"

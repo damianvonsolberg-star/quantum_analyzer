@@ -6,7 +6,8 @@ from typing import Any
 
 import pandas as pd
 
-from quantum_analyzer.backtest.engine import BacktestConfig, run_backtest
+from quantum_analyzer.backtest.engine import BacktestConfig
+from quantum_analyzer.experiments.evaluator import build_candidate, evaluate_candidate
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig
 import json
 
@@ -56,7 +57,24 @@ def run_experiments(
                 initial_equity=1_000_000,
             )
 
-            r = run_backtest(f, c, templates, wf, bt, out_dir=exp_dir)
+            family = str(spec.policy_params.get("candidate_family", "trend"))
+            cparams = dict(spec.policy_params.get("candidate_params", {}))
+            cand = build_candidate(
+                candidate_id=f"{family}:{spec.feature_subset}:{spec.horizon}:{spec.regime_slice}",
+                family=family,
+                params=cparams,
+                feature_subset=spec.feature_subset,
+                horizon=spec.horizon,
+                regime_filter=str(spec.policy_params.get("candidate_regime_filter", spec.regime_slice)),
+            )
+            cr = evaluate_candidate(
+                features=f,
+                close=c,
+                candidate=cand,
+                walkforward=wf,
+                backtest=bt,
+                out_dir=str(exp_dir),
+            )
 
             # Ensure doctor-compatible artifacts in each experiment dir.
             # 1) persist templates for experiment-level doctor checks
@@ -81,7 +99,7 @@ def run_experiments(
                     encoding="utf-8",
                 )
 
-            sb = score_result(r.summary, r.diagnostics.to_dict())
+            sb = score_result(cr.summary, cr.diagnostics)
 
             rows.append(
                 {
@@ -94,13 +112,17 @@ def run_experiments(
                     "regime_slice": spec.regime_slice,
                     "policy_params": spec.policy_params,
                     "artifact_dir": str(exp_dir),
-                    "return_pct": r.summary.get("return_pct", 0.0),
-                    "max_drawdown": r.diagnostics.max_drawdown,
-                    "expectancy": r.diagnostics.expectancy_by_template.get(next(iter(r.diagnostics.expectancy_by_template), "none"), 0.0)
-                    if r.diagnostics.expectancy_by_template
-                    else 0.0,
-                    "calibration_proxy": r.diagnostics.calibration_proxy,
-                    "turnover": r.diagnostics.turnover,
+                    "candidate_id": cr.candidate_id,
+                    "candidate_family": cr.family,
+                    "return_pct": cr.summary.get("return_pct", 0.0),
+                    "max_drawdown": float(cr.diagnostics.get("max_drawdown", 0.0)),
+                    "expectancy": (
+                        list((cr.diagnostics.get("expectancy_by_template") or {"none": 0.0}).values())[0]
+                        if (cr.diagnostics.get("expectancy_by_template") or {})
+                        else 0.0
+                    ),
+                    "calibration_proxy": float(cr.diagnostics.get("calibration_proxy", 0.0)),
+                    "turnover": float(cr.diagnostics.get("turnover", 0.0)),
                     "score": sb["score"],
                     "hard_gate_pass": sb["hard_gate_pass"],
                     "score_breakdown": sb,

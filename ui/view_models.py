@@ -27,6 +27,8 @@ class UiLiveAdvice:
     reasons: list[str] = field(default_factory=list)
     advisory_mode: str = "spot_only"
     target_scope: str = "advisory_sleeve"
+    top_alternatives: list[dict[str, Any]] = field(default_factory=list)
+    invalidation_notes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -37,6 +39,8 @@ class UiBacktestSummary:
     return_pct: float | None = None
     max_drawdown: float | None = None
     schema_version: str | None = None
+    discovery_survivors: int | None = None
+    discovery_rejected: int | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 

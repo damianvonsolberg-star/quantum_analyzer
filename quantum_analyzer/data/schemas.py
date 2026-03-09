@@ -5,8 +5,8 @@ from typing import Any
 
 SCHEMA_VERSION = "1.1.0"
 
-SPOT_SYMBOLS = ["SOLUSDT", "SOLUSDC", "BTCUSDT", "ETHUSDT"]
-KLINE_INTERVALS = ["1m", "5m", "15m", "1h", "4h"]
+SPOT_SYMBOLS = ["SOLUSDC", "SOLUSDT", "BTCUSDC", "BTCUSDT", "ETHUSDT"]
+KLINE_INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d", "1w"]
 
 
 @dataclass(frozen=True)

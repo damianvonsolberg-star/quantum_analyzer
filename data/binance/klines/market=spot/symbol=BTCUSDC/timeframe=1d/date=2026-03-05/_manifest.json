@@ -1,0 +1,40 @@
+{
+  "dataset": "klines",
+  "market": "spot",
+  "symbol": "BTCUSDC",
+  "timeframe": "1d",
+  "date": "2026-03-05",
+  "updated_at": "2026-03-08T23:39:04.028425+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-08T23:32:32.062843+00:00",
+      "file": "part-20260308T233232061966Z-614b45cb.parquet",
+      "rows": 1,
+      "checksum_sha256": "1b25bfa35d02d60dab7b89d276dcfbafe5cf351bc3fdc357dd93d3c35f7d2ff8",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772668800000,
+        "max_source_ts_ms": 1772668800000
+      }
+    },
+    {
+      "written_at": "2026-03-08T23:39:04.028420+00:00",
+      "file": "part-20260308T233904027344Z-677cc8c6.parquet",
+      "rows": 1,
+      "checksum_sha256": "0bd93e9bca6488e8f916a5092e10a14de54a1e2a49972f52f307958e91d480c8",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772668800000,
+        "max_source_ts_ms": 1772668800000
+      }
+    }
+  ],
+  "totals": {
+    "files": 2,
+    "rows": 2
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1772668800000,
+    "max_source_ts_ms": 1772668800000
+  }
+}

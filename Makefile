@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: ui ui-install ui-doctor test-ui test lint-shell explorer-fast explorer-daily explorer-full test-explorer promote-signal test-signals schedule-explorer
+.PHONY: ui ui-install ui-doctor test-ui test lint-shell explorer-fast explorer-daily explorer-full test-explorer promote-signal test-signals schedule-explorer research-cycle schedule-research-cycle test-research
 
 ui-install:
 	python3 -m pip install -r requirements-ui.txt
@@ -20,6 +20,9 @@ test-explorer:
 test-signals:
 	python3 -m pytest tests/test_signal_selector.py tests/test_promotion.py -q
 
+test-research:
+	python3 -m pytest tests/test_discovery_page.py tests/test_research_cycle.py -q
+
 explorer-fast:
 	python3 scripts/run_explorer.py --preset fast --artifacts-root "$${EXPLORER_ARTIFACTS_ROOT:-./artifacts/explorer}"
 
@@ -34,6 +37,13 @@ promote-signal:
 
 schedule-explorer:
 	python3 scripts/schedule_explorer.py --preset "$${EXPLORER_PRESET:-daily}" --explorer-root "$${EXPLORER_ARTIFACTS_ROOT:-./artifacts/explorer}" --governance-status "$${GOVERNANCE_STATUS:-OK}"
+
+research-cycle:
+	python3 scripts/run_research_cycle.py --config "$${RESEARCH_CONFIG:-config/research/solusdc_research.json}" --discovery-config "$${DISCOVERY_CONFIG:-config/discovery/discovery_daily.json}"
+
+schedule-research-cycle:
+	python3 scripts/schedule_research_cycle.py --config "$${RESEARCH_CONFIG:-config/research/solusdc_research.json}" --discovery-config "$${DISCOVERY_CONFIG:-config/discovery/discovery_daily.json}" --interval-seconds "$${RESEARCH_INTERVAL_SECONDS:-900}" --runs "$${RESEARCH_RUNS:-1}"
+
 
 # Full project test suite
 

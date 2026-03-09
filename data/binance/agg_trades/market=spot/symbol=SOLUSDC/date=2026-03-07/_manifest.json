@@ -1,0 +1,51 @@
+{
+  "dataset": "agg_trades",
+  "market": "spot",
+  "symbol": "SOLUSDC",
+  "timeframe": null,
+  "date": "2026-03-07",
+  "updated_at": "2026-03-08T22:54:19.090467+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-08T22:46:00.895971+00:00",
+      "file": "part-20260308T224600797338Z-2c7eaf5e.parquet",
+      "rows": 29965,
+      "checksum_sha256": "9143dee96b13bfa250c98544f32733e9ca431ea263ada7d60eec16cb12c1bae8",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772841600444,
+        "max_source_ts_ms": 1772927991117
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:48:04.275327+00:00",
+      "file": "part-20260308T224804191861Z-2a5ba99f.parquet",
+      "rows": 29966,
+      "checksum_sha256": "d7c9eb23ca44040e5e9f04690928d13304ba1a99a5f71ca8380c9134780284f7",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772841600444,
+        "max_source_ts_ms": 1772927991117
+      }
+    },
+    {
+      "written_at": "2026-03-08T22:54:19.084616+00:00",
+      "file": "part-20260308T225418999657Z-a8f74f2d.parquet",
+      "rows": 29966,
+      "checksum_sha256": "57c1370c11916735f51af483affa9767e77c61ec3be4ada89c3941ac5f239f6e",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1772841600444,
+        "max_source_ts_ms": 1772927991117
+      }
+    }
+  ],
+  "totals": {
+    "files": 3,
+    "rows": 89897
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1772841600444,
+    "max_source_ts_ms": 1772927991117
+  }
+}

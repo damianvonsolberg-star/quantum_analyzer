@@ -1,0 +1,40 @@
+{
+  "dataset": "agg_trades",
+  "market": "spot",
+  "symbol": "SOLUSDT",
+  "timeframe": null,
+  "date": "2026-02-14",
+  "updated_at": "2026-03-08T23:38:36.868391+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-08T23:32:07.130372+00:00",
+      "file": "part-20260308T233206597347Z-ff519611.parquet",
+      "rows": 176537,
+      "checksum_sha256": "2f5f0f8b885040859b40e925b71a901e5e101fbe28d294c0dd5cd39d9bcf3d0c",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1771027200002,
+        "max_source_ts_ms": 1771113599434
+      }
+    },
+    {
+      "written_at": "2026-03-08T23:38:36.831993+00:00",
+      "file": "part-20260308T233836268570Z-8a2073c7.parquet",
+      "rows": 176562,
+      "checksum_sha256": "f94cf8df1b952f3dd3c297eae59738bba2b1ac0cc585e4dfb7be79061f10352d",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1771027200002,
+        "max_source_ts_ms": 1771113599434
+      }
+    }
+  ],
+  "totals": {
+    "files": 2,
+    "rows": 353099
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1771027200002,
+    "max_source_ts_ms": 1771113599434
+  }
+}

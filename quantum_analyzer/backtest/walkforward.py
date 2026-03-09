@@ -13,9 +13,10 @@ class WalkForwardConfig:
     embargo_bars: int = 0
 
 
-def purged_walkforward_splits(n: int, cfg: WalkForwardConfig) -> list[tuple[np.ndarray, np.ndarray]]:
+def purged_walkforward_splits(n: int, cfg: WalkForwardConfig, step_bars: int | None = None) -> list[tuple[np.ndarray, np.ndarray]]:
     splits: list[tuple[np.ndarray, np.ndarray]] = []
     start = 0
+    step = int(step_bars or cfg.test_bars)
     while True:
         tr_start = start
         tr_end = tr_start + cfg.train_bars
@@ -33,6 +34,6 @@ def purged_walkforward_splits(n: int, cfg: WalkForwardConfig) -> list[tuple[np.n
         keep = train_idx[(train_idx < lo) | (train_idx >= hi)]
         if len(keep) > 0 and len(test_idx) > 0:
             splits.append((keep, test_idx))
-        start += cfg.test_bars
+        start += step
 
     return splits

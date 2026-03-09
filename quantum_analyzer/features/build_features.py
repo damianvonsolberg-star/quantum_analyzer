@@ -33,6 +33,10 @@ def build_feature_frame(
     funding: pd.DataFrame,
     basis: pd.DataFrame,
     open_interest: pd.DataFrame,
+    *,
+    primary_symbol: str = "SOLUSDC",
+    context_symbol: str = "BTCUSDT",
+    quote_currency: str = "USDC",
 ) -> pd.DataFrame:
     """Build the full feature frame indexed by timestamp (UTC).
 
@@ -143,5 +147,10 @@ def build_feature_frame(
     all_f["source_ts_funding_ms"] = fund_src.fillna(sol_src).astype("int64")
     all_f["source_ts_oi_ms"] = oi_src.fillna(sol_src).astype("int64")
     all_f["source_ts_basis_ms"] = basis_src.fillna(sol_src).astype("int64")
+
+    # explicit research semantics/provenance
+    all_f["primary_symbol"] = primary_symbol
+    all_f["context_symbol"] = context_symbol
+    all_f["quote_currency"] = quote_currency
 
     return all_f

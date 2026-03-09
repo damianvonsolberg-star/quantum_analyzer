@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.1.0",
+  "start_ms": 1773005843630,
+  "end_ms": 1773014483630,
+  "coverage": {
+    "agg_trades": 0.9992738425925926,
+    "book_ticker": 0.0,
+    "open_interest": 0.0,
+    "basis": 0.0,
+    "funding": 0.0
+  },
+  "notes": {
+    "book_ticker": "historical book_ticker sampling not available in this backfill path",
+    "open_interest": "one-off snapshot disabled for historical backfills",
+    "basis": "one-off basis snapshot disabled for historical backfills"
+  }
+}

@@ -24,10 +24,6 @@ def _resolve_default_artifact_dir(cfg: UIConfig) -> str:
     if (candidate / "artifact_bundle.json").exists():
         return str(candidate)
 
-    fixtures = ROOT / "ui" / "fixtures"
-    if (fixtures / "artifact_bundle.json").exists():
-        return str(fixtures)
-
     return str(candidate)
 
 
@@ -67,14 +63,34 @@ def persist_artifact_dir(path: str) -> None:
         pass
 
 
+def _latest_operator_artifact_hint() -> str | None:
+    p = ROOT / "artifacts" / "explorer" / "advise_now_status.json"
+    if not p.exists():
+        return None
+    try:
+        import json
+
+        j = json.loads(p.read_text(encoding="utf-8"))
+        d = j.get("doctor_artifacts")
+        if d and Path(str(d)).exists():
+            return str(d)
+    except Exception:
+        return None
+    return None
+
+
 def init_state() -> None:
     cfg = UIConfig()
     persisted = load_persisted_artifact_dir()
-    default_artifacts = persisted or _resolve_default_artifact_dir(cfg)
+    hint = _latest_operator_artifact_hint()
+    default_artifacts = hint or persisted or _resolve_default_artifact_dir(cfg)
     st.session_state.setdefault("artifact_dir", default_artifacts)
     st.session_state.setdefault("wallet_address", cfg.default_wallet)
     st.session_state.setdefault("rpc_url", cfg.default_rpc)
     st.session_state.setdefault("refresh_seconds", cfg.default_refresh_seconds)
+    st.session_state.setdefault("live_ticker_seconds", 5)
+    st.session_state.setdefault("research_cycle_minutes", 15)
+    st.session_state.setdefault("discovery_cycle_minutes", 60)
 
 
 def load_json(path: Path) -> dict[str, Any] | None:

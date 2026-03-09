@@ -18,6 +18,7 @@ st.set_page_config(page_title="Drift & Governance", layout="wide")
 init_state()
 sidebar_controls()
 st.title("Drift & Governance · Trust Monitor")
+st.caption("Governance controls advisory trust level (OK/WATCH/HALT).")
 st.caption("Should we trust the model right now?")
 artifact_banner()
 

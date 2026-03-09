@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .candidate_grid import expand_candidate_grid
 from .specs import ExperimentSpec
 
 
@@ -22,10 +23,14 @@ def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
         subsets = ["geom_core", "geom_vol", "geom_vol_cross", "geom_vol_flow", "full_stack"]
 
     regimes = ["all", "low_vol", "mid_vol", "high_vol"]
-    param_grid = [
-        {"turnover_cap": 0.1, "round_trip_cost_bps": 12.0},
-        {"turnover_cap": 0.15, "round_trip_cost_bps": 15.0},
-    ]
+    candidate_grid = expand_candidate_grid(
+        {
+            "families": ["trend", "mean_reversion", "breakout", "regime_switch", "ensemble", "ml_baseline"],
+            "thresholds": [0.15, 0.25],
+            "feature_subsets": subsets,
+            "regime_filters": regimes,
+        }
+    )
 
     specs: list[ExperimentSpec] = []
     for w in windows:
@@ -33,18 +38,25 @@ def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
             if t >= w:
                 continue
             for h in horizons:
-                for fs in subsets:
-                    for r in regimes:
-                        for p in param_grid:
-                            specs.append(
-                                ExperimentSpec(
-                                    window_bars=w,
-                                    test_bars=t,
-                                    horizon=h,
-                                    feature_subset=fs,
-                                    regime_slice=r,
-                                    policy_params=p,
-                                    seed=7,
-                                )
-                            )
+                for cand in candidate_grid:
+                    if cand["horizon"] != h:
+                        continue
+                    p = {
+                        "turnover_cap": 0.1,
+                        "round_trip_cost_bps": float(cand.get("cost_assumption_bps", 15.0)),
+                        "candidate_family": cand["family"],
+                        "candidate_params": cand["params"],
+                        "candidate_regime_filter": cand["regime_filter"],
+                    }
+                    specs.append(
+                        ExperimentSpec(
+                            window_bars=w,
+                            test_bars=t,
+                            horizon=h,
+                            feature_subset=cand["feature_subset"],
+                            regime_slice=cand["regime_filter"],
+                            policy_params=p,
+                            seed=7,
+                        )
+                    )
     return specs

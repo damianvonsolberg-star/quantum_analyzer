@@ -19,11 +19,12 @@ def select_final_signal(
     *,
     min_mass: float = 0.35,
     min_margin: float = 0.10,
+    require_trustworthy: bool = True,
 ) -> dict[str, Any]:
     if not approved_candidates:
         return {
-            "action": "HOLD",
-            "reason": "no_approved_candidates",
+            "action": "WAIT",
+            "reason": "no_trustworthy_new_signal_found" if require_trustworthy else "no_approved_candidates",
             "confidence": 0.0,
             "target_position": 0.0,
         }
@@ -48,6 +49,11 @@ def select_final_signal(
     top_share = top_mass / total
     margin = (top_mass - second_mass) / total
 
+    alternatives = [
+        {"action": a, "mass_share": float(m / total)}
+        for a, m in ranked[1:4]
+    ]
+
     if top_share < min_mass or margin < min_margin:
         return {
             "action": "HOLD",
@@ -55,6 +61,7 @@ def select_final_signal(
             "confidence": float(top_share),
             "target_position": 0.0,
             "action_masses": {k: (v / total) for k, v in buckets.items()},
+            "alternatives": alternatives,
         }
 
     # weighted mean target among top-action members
@@ -79,4 +86,5 @@ def select_final_signal(
         "target_position": float(target),
         "action_masses": {k: (v / total) for k, v in buckets.items()},
         "margin": float(margin),
+        "alternatives": alternatives,
     }
