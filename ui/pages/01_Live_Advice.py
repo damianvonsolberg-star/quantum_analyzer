@@ -190,7 +190,8 @@ if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None
         target_scope="advisory_sleeve",
     )
 
-display_action = portfolio_advice.action_label if portfolio_advice is not None else rec.action_text
+# Canonical operator action comes from final advisory artifact.
+display_action = ui_advice.headline_action
 
 h1, h2 = st.columns([3.2, 1.8])
 with h1:
@@ -259,7 +260,7 @@ if gov_reasons:
     st.markdown("**Governance reasons:** " + ", ".join(gov_reasons))
 
 if portfolio_advice is not None:
-    st.markdown(f"**Main spot recommendation:** {portfolio_advice.action_label}")
+    st.markdown(f"**Main spot recommendation:** {display_action}")
     st.markdown(f"**Model raw action field:** {ui_advice.headline_action}")
     st.markdown(
         f"**Target semantics:** model target_position={portfolio_advice.model_target_position:+.3f} (generic model target), "

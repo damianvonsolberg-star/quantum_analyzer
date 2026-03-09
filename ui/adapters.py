@@ -395,6 +395,23 @@ class ArtifactAdapter:
         return out
 
     def to_drift_status(self) -> UiDriftStatus:
+        final_adv = self._final_advisory_json()
+        if isinstance(final_adv, dict) and isinstance(final_adv.get("governance"), dict):
+            gov = final_adv.get("governance", {})
+            status = str(gov.get("overall_status", "WATCH")).upper()
+            reasons = gov.get("kill_switch_reasons", []) if isinstance(gov.get("kill_switch_reasons"), list) else []
+            ts = str(final_adv.get("updated_at") or final_adv.get("timestamp") or "") or None
+            return UiDriftStatus(
+                ok=(status == "OK" and not bool(gov.get("kill_switch_active", False))),
+                warnings=[] if status == "OK" else [f"governance_status={status}"],
+                hard_failures=reasons,
+                latest_timestamp=ts,
+                schema_versions=self.schema_versions(),
+                governance_status=status,
+                governance_payload=gov,
+                raw={"governance": gov, "freshness": final_adv.get("freshness", {})},
+            )
+
         raw = self.load_raw()
         bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
         doctor = raw.get("doctor") if isinstance(raw.get("doctor"), dict) else {}
