@@ -311,11 +311,31 @@ def _freshness_badge(ts_str: str | None, label: str) -> str:
 
 
 l1, l2 = st.columns(2)
-# Freshness should track artifact production/governance timestamp first.
+# Freshness should track the freshest trustworthy pipeline timestamp.
 artifact_ts = drift.latest_timestamp or ui_advice.timestamp
+cycle_ts = None
+if isinstance(cycle, dict):
+    cycle_ts = cycle.get("finished_at") or cycle.get("started_at")
+
+def _max_ts(a: str | None, b: str | None) -> str | None:
+    try:
+        ta = datetime.fromisoformat(str(a).replace("Z", "+00:00")) if a else None
+    except Exception:
+        ta = None
+    try:
+        tb = datetime.fromisoformat(str(b).replace("Z", "+00:00")) if b else None
+    except Exception:
+        tb = None
+    if ta and tb:
+        return a if ta >= tb else b
+    return a or b
+
+artifact_ts = _max_ts(artifact_ts, cycle_ts)
 live_ts = st.session_state.get('last_live_refresh_ts', None)
 l1.caption(_freshness_badge(artifact_ts, "Artifact timestamp"))
 l2.caption(_freshness_badge(live_ts, "Live wallet/price refresh"))
+
+st.caption(f"Artifact dir in use: {st.session_state.get('artifact_dir')}")
 
 with st.expander("Advanced stats"):
     st.json(
