@@ -85,7 +85,7 @@ def main() -> int:
             "entropy": supporting.get("entropy", None),
             "expected_edge_bps": edge_bps,
             "expected_cost_bps": (float(cost_bps) if isinstance(cost_bps, (float, int)) else None),
-            "expectancy": expect if isinstance(expect, (float, int)) else 0.0,
+            "expectancy": (float(expect) if isinstance(expect, (float, int)) else None),
             "regime": supporting.get("regime_explanation", "unknown"),
             "why_selected": b.get("reason", ""),
             "reason": b.get("reason", ""),
@@ -170,6 +170,7 @@ def main() -> int:
             "proxy_benchmarks": rg.get("proxy_benchmarks", []),
             "human_reason": rg.get("human_reason"),
         }
+        out["release_state"] = rg.get("overall_state", out.get("release_state", "NO_EDGE"))
         if not bool(rg.get("passed", False)):
             out.update({
                 "status": "no_edge",
@@ -206,10 +207,20 @@ def main() -> int:
         if isinstance(ws, list):
             ws.append("research_cycle_stale_or_failed")
 
+    non_actionable = {"stale_cycle", "no_edge", "missing_signal_bundle", "insufficient_evidence"}
+    is_edge = str(out.get("release_state", "")).upper() == "EDGE"
+    is_ok = (str(out.get("status", "")).lower() == "approved") and is_edge
+
+    ks_reasons = out.get("release_gate_failures", []) if isinstance(out.get("release_gate_failures"), list) else []
+    if not ks_reasons:
+        r = out.get("reason")
+        if isinstance(r, str) and r:
+            ks_reasons = [r]
+
     out["governance"] = {
-        "overall_status": "OK" if out.get("status") not in {"stale_cycle", "no_edge", "missing_signal_bundle", "insufficient_evidence"} else "WATCH",
-        "kill_switch_active": bool(out.get("status") in {"stale_cycle", "no_edge", "missing_signal_bundle"}),
-        "kill_switch_reasons": out.get("release_gate_failures", []) if isinstance(out.get("release_gate_failures"), list) else [],
+        "overall_status": "OK" if is_ok else "WATCH",
+        "kill_switch_active": (not is_ok) or (str(out.get("status", "")).lower() in non_actionable),
+        "kill_switch_reasons": ks_reasons,
     }
     out["freshness"] = {
         "policy": "cycle_ttl_60m",
