@@ -49,7 +49,7 @@ def decide_recommendation(
     # Minimal required fields for actionable recommendation.
     # confidence/entropy may be absent for some artifact-backed promoted paths,
     # and should not force HALT when governance is otherwise OK/WATCH.
-    required_invalid = (advice.headline_action == "")
+    required_invalid = (advice.headline_action == "" or advice.target_position is None)
 
     status = (drift.governance_status or ("OK" if drift.ok else "HALT")).upper()
 
@@ -85,7 +85,7 @@ def decide_recommendation(
         )
 
     current_w = float(portfolio.current_sol_weight) if portfolio and portfolio.current_sol_weight is not None else 0.0
-    delta = float(advice.target_position) - current_w
+    delta = float(advice.target_position) - current_w if advice.target_position is not None else 0.0
     conf_ok = (advice.confidence or 0.0) >= 0.55
     ent_ok = (advice.entropy or 1.0) <= 0.75
 

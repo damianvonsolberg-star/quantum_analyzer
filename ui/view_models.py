@@ -18,9 +18,9 @@ class UiLiveAdvice:
     timestamp: str
     headline_action: str
     traffic_light: str
-    target_position: float
-    expected_edge_bps: float
-    expected_cost_bps: float
+    target_position: float | None
+    expected_edge_bps: float | None
+    expected_cost_bps: float | None
     confidence: float | None
     entropy: float | None
     risk_note: str
@@ -29,6 +29,13 @@ class UiLiveAdvice:
     target_scope: str = "advisory_sleeve"
     top_alternatives: list[dict[str, Any]] = field(default_factory=list)
     invalidation_notes: list[str] = field(default_factory=list)
+    status: str | None = None
+    release_state: str | None = None
+    governance_status: str | None = None
+    freshness_state: str | None = None
+    symbol: str | None = None
+    timeframe: str | None = None
+    source_ids: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

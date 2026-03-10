@@ -142,7 +142,9 @@ def run_experiments(
                     encoding="utf-8",
                 )
 
-            sb = score_result(cr.summary, cr.diagnostics)
+            summary_for_score = dict(cr.summary)
+            summary_for_score["strict_robustness"] = True
+            sb = score_result(summary_for_score, cr.diagnostics)
 
             rows.append(
                 {

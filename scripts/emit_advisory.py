@@ -78,9 +78,9 @@ def main() -> int:
             "action_raw": action_raw,
             "action_spot": action_spot,
             "action": action_spot,
-            "target_position_raw": float(b.get("target_position", 0.0) or 0.0),
-            "target_position_spot": float(b.get("target_position", 0.0) or 0.0),
-            "target_position": float(b.get("target_position", 0.0) or 0.0),
+            "target_position_raw": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
+            "target_position_spot": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
+            "target_position": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
             "confidence": float(b.get("confidence", 0.0) or 0.0),
             "entropy": supporting.get("entropy", None),
             "expected_edge_bps": edge_bps,
@@ -93,8 +93,8 @@ def main() -> int:
             "risk_notes": supporting.get("risk_notes", []) if isinstance(supporting.get("risk_notes"), list) else [],
             "alternatives": b.get("top_alternatives", []),
             "invalidation": b.get("invalidation_reasons", []),
-            "symbol": str(source.get("trading_symbol", "SOLUSDC")),
-            "timeframe": str(source.get("timeframe", "1h")),
+            "symbol": (str(source.get("trading_symbol")) if source.get("trading_symbol") else None),
+            "timeframe": (str(source.get("timeframe")) if source.get("timeframe") else None),
             "source_ids": {
                 "leaderboard": source.get("leaderboard"),
                 "promotion_cluster": source.get("promotion_cluster"),
@@ -110,6 +110,26 @@ def main() -> int:
             rg = json.loads(rg_path.read_text(encoding="utf-8"))
         except Exception:
             rg = None
+
+    # semantic completeness gate: missing core measured semantics -> insufficient evidence
+    missing_semantics = []
+    if out.get("target_position") is None:
+        missing_semantics.append("missing_measured_target")
+    if not out.get("symbol"):
+        missing_semantics.append("missing_symbol_semantics")
+    if not out.get("timeframe"):
+        missing_semantics.append("missing_timeframe_semantics")
+    if missing_semantics:
+        out.update({
+            "status": "insufficient_evidence",
+            "action": "WAIT",
+            "action_spot": "WAIT",
+            "reason": "missing_required_semantics",
+            "release_state": "NO_EDGE",
+        })
+        ws = out.setdefault("warnings", [])
+        if isinstance(ws, list):
+            ws.extend(missing_semantics)
 
     if isinstance(rg, dict):
         out["release_gate"] = {

@@ -168,9 +168,18 @@ if curr_px is not None and isinstance(prev_px, (int, float)) and prev_px > 0:
     px_delta_pct = (px_delta / float(prev_px)) * 100.0
 
 rec = decide_recommendation(ui_advice, snap, drift)
+if ui_advice.status:
+    # Canonical advisory-driven rendering path (no heuristic recomputation for trust headline).
+    canonical_light = "HALT" if (ui_advice.governance_status or "").upper() == "HALT" else ("RED" if (ui_advice.release_state or "").upper() in {"NO_EDGE", "LOW_EDGE"} or (ui_advice.status or "").lower() in {"no_edge", "stale_cycle", "insufficient_evidence", "missing_signal_bundle"} else ui_advice.traffic_light.upper())
+    rec.light = canonical_light
+    rec.action_text = ui_advice.headline_action
+    if ui_advice.reasons:
+        rec.top_reasons = list(ui_advice.reasons)
+    if ui_advice.invalidation_notes:
+        rec.top_risks = list(ui_advice.invalidation_notes)
 
 portfolio_advice = None
-if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None:
+if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None and ui_advice.target_position is not None:
     from ui.portfolio import PortfolioSnapshot
 
     ps = PortfolioSnapshot(
@@ -245,12 +254,14 @@ else:
     with n2:
         render_soft_card("Do this now (SOL)", "n/a")
     with n3:
-        render_soft_card("Target spot allocation", f"{ui_advice.target_position*100:.2f}%")
+        render_soft_card("Target spot allocation", (f"{ui_advice.target_position*100:.2f}%" if ui_advice.target_position is not None else "n/a"))
 
 s1, s2, s3 = st.columns(3)
 s1.metric("Confidence", f"{(ui_advice.confidence or 0.0):.2f}")
 s2.metric("Entropy", f"{(ui_advice.entropy or 0.0):.2f}")
-s3.metric("Edge vs Cost (bps)", f"{ui_advice.expected_edge_bps:.2f} / {ui_advice.expected_cost_bps:.2f}")
+edge_txt = f"{ui_advice.expected_edge_bps:.2f}" if ui_advice.expected_edge_bps is not None else "n/a"
+cost_txt = f"{ui_advice.expected_cost_bps:.2f}" if ui_advice.expected_cost_bps is not None else "n/a"
+s3.metric("Edge vs Cost (bps)", f"{edge_txt} / {cost_txt}")
 
 gov_status = (drift.governance_status or ("OK" if drift.ok else "HALT")).upper()
 gov_reasons = drift.hard_failures[:3]

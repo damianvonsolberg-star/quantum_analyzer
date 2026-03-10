@@ -210,9 +210,9 @@ class ArtifactAdapter:
             conf_raw = final_adv.get("confidence", None)
             conf = float(conf_raw) if isinstance(conf_raw, (float, int)) else None
             edge_raw = final_adv.get("expected_edge_bps", final_adv.get("expectancy", None))
-            edge = float(edge_raw) if isinstance(edge_raw, (float, int)) else 0.0
+            edge = float(edge_raw) if isinstance(edge_raw, (float, int)) else None
             cost_raw = final_adv.get("expected_cost_bps", None)
-            cost = float(cost_raw) if isinstance(cost_raw, (float, int)) else 0.0
+            cost = float(cost_raw) if isinstance(cost_raw, (float, int)) else None
             ts = str(final_adv.get("timestamp") or final_adv.get("updated_at") or "")
             if not ts:
                 ts = pd.Timestamp.utcnow().isoformat()
@@ -222,9 +222,15 @@ class ArtifactAdapter:
             elif isinstance(final_adv.get("reason"), str) and final_adv.get("reason"):
                 reasons = [str(final_adv.get("reason"))]
 
-            if action in {"WAIT", "HOLD"}:
+            gov = final_adv.get("governance", {}) if isinstance(final_adv.get("governance"), dict) else {}
+            fresh = final_adv.get("freshness", {}) if isinstance(final_adv.get("freshness"), dict) else {}
+            release_state = str(final_adv.get("release_state") or (final_adv.get("release_gate", {}) or {}).get("overall_state", "")).upper()
+            status = str(final_adv.get("status", "")).lower()
+            if status in {"no_edge", "stale_cycle", "insufficient_evidence", "missing_signal_bundle"} or release_state in {"NO_EDGE", "LOW_EDGE"}:
                 traffic = "red"
-            elif edge > cost and (conf or 0.0) >= 0.5:
+            elif action in {"WAIT", "HOLD"}:
+                traffic = "yellow"
+            elif (edge is not None and cost is not None and edge > cost and (conf or 0.0) >= 0.5):
                 traffic = "green"
             else:
                 traffic = "yellow"
@@ -233,7 +239,7 @@ class ArtifactAdapter:
                 timestamp=ts,
                 headline_action=action,
                 traffic_light=traffic,
-                target_position=float(final_adv.get("target_position", 0.0) or 0.0),
+                target_position=(float(final_adv.get("target_position")) if isinstance(final_adv.get("target_position"), (float, int)) else None),
                 expected_edge_bps=edge,
                 expected_cost_bps=cost,
                 confidence=conf,
@@ -244,6 +250,13 @@ class ArtifactAdapter:
                 target_scope="advisory_sleeve",
                 top_alternatives=(final_adv.get("alternatives", []) if isinstance(final_adv.get("alternatives"), list) else []),
                 invalidation_notes=(final_adv.get("invalidation", []) if isinstance(final_adv.get("invalidation"), list) else []),
+                status=str(final_adv.get("status")) if final_adv.get("status") is not None else None,
+                release_state=release_state or None,
+                governance_status=(str(gov.get("overall_status")).upper() if gov.get("overall_status") else None),
+                freshness_state=(str(fresh.get("state")) if fresh.get("state") else None),
+                symbol=(str(final_adv.get("symbol")) if final_adv.get("symbol") else None),
+                timeframe=(str(final_adv.get("timeframe")) if final_adv.get("timeframe") else None),
+                source_ids=(final_adv.get("source_ids", {}) if isinstance(final_adv.get("source_ids"), dict) else {}),
             )
 
         bundle_v2 = self._bundle_v2()
