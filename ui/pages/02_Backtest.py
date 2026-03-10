@@ -206,8 +206,35 @@ if equity.empty and actions.empty:
     if not eq2.empty or not ac2.empty:
         equity, actions = _normalize_ts(eq2, "ts"), _normalize_ts(ac2, "ts")
         st.info("Replay mode: showing recomputed timeline from fresh features + current logic (not emitted actions.csv).")
-    elif err:
-        st.warning(f"Replay mode unavailable: {err}")
+    else:
+        # Last-resort visibility mode: show recent timeline as explicit HOLD/no-action bars
+        # so operators can still see that no actionable signals were generated.
+        try:
+            reg = pd.read_parquet(ROOT / "artifacts" / "explorer" / "registry.parquet")
+            rr = reg.loc[reg["experiment_id"] == chart_source_run]
+            if not rr.empty:
+                snapshot_id = str(rr.iloc[0].get("snapshot_id", ""))
+                if snapshot_id:
+                    feats = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
+                    c = feats[["close"]].copy().tail(24)
+                    c = c.reset_index().rename(columns={"index": "ts"}) if "ts" not in c.columns else c
+                    if "ts" not in c.columns:
+                        c["ts"] = feats.index[-len(c):]
+                    equity = pd.DataFrame({"ts": c["ts"], "equity": [1_000_000.0] * len(c)})
+                    actions = pd.DataFrame({
+                        "ts": c["ts"],
+                        "action": ["HOLD"] * len(c),
+                        "target_position": [0.0] * len(c),
+                        "expected_edge_bps": [0.0] * len(c),
+                        "expected_cost_bps": [0.0] * len(c),
+                        "reason": ["no_action_generated_in_latest_run"] * len(c),
+                    })
+                    equity, actions = _normalize_ts(equity, "ts"), _normalize_ts(actions, "ts")
+                    st.warning("No actionable signals were generated in the latest run. Showing HOLD/no-action timeline for visibility.")
+        except Exception:
+            pass
+        if equity.empty and actions.empty and err:
+            st.warning(f"Replay mode unavailable: {err}")
 
 # filters
 f1, f2, f3, f4 = st.columns(4)
