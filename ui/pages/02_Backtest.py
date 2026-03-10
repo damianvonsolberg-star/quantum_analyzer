@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 import sys
+import json
 
 import pandas as pd
 import streamlit as st
@@ -33,8 +34,10 @@ st.title("Backtest · Performance Lab")
 st.caption("Advanced diagnostics are below; headline advisory remains on Live Advice.")
 artifact_banner()
 
-adapter = ArtifactAdapter(st.session_state["artifact_dir"])
+selected_artifact_dir = st.session_state["artifact_dir"]
+adapter = ArtifactAdapter(selected_artifact_dir)
 raw = adapter.load_raw()
+chart_source_run = Path(selected_artifact_dir).name if selected_artifact_dir else "unknown"
 summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
 bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
 equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else pd.DataFrame()
@@ -57,6 +60,7 @@ if equity.empty and actions.empty:
             equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else pd.DataFrame()
             actions = raw.get("actions") if isinstance(raw.get("actions"), pd.DataFrame) else pd.DataFrame()
             templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFrame) else pd.DataFrame()
+            chart_source_run = latest_rich.name
             st.info(f"Backtest page auto-switched to latest chartable run: {latest_rich.name}")
 
 artifact_ts = None
@@ -66,6 +70,20 @@ if artifact_ts:
     st.caption(f"🕒 Artifact timestamp: {artifact_ts}")
 else:
     st.caption("🕒 Artifact timestamp: not available")
+
+adv_ts = "n/a"
+adv_src = "n/a"
+adv_p = ROOT / "artifacts" / "promoted" / "advisory_latest.json"
+if adv_p.exists():
+    try:
+        aj = json.loads(adv_p.read_text(encoding="utf-8"))
+        adv_ts = str(aj.get("updated_at") or aj.get("timestamp") or "n/a")
+        if isinstance(aj.get("source_ids"), dict):
+            adv_src = str(aj["source_ids"].get("leaderboard") or "n/a")
+    except Exception:
+        pass
+st.caption(f"Advisory source timestamp: {adv_ts} · Chart source run: {chart_source_run}")
+st.caption(f"Advisory source id/path: {adv_src}")
 
 
 def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:

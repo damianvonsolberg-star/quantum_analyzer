@@ -139,6 +139,9 @@ def main() -> int:
             "passed": bool(rg.get("passed", False)),
             "overall_state": rg.get("overall_state", "NO_EDGE"),
             "failures": rg.get("failures", []),
+            "failed_benchmarks": rg.get("failed_benchmarks", []),
+            "missing_benchmarks": rg.get("missing_benchmarks", []),
+            "human_reason": rg.get("human_reason"),
         }
         if not bool(rg.get("passed", False)):
             out.update({
@@ -153,6 +156,9 @@ def main() -> int:
                 "release_state": rg.get("overall_state", "NO_EDGE"),
                 "release_gate_failures": rg.get("failures", []),
             })
+            hr = rg.get("human_reason")
+            if hr:
+                out["risk_notes"] = list(out.get("risk_notes", [])) + [str(hr)]
             ws = out.setdefault("warnings", [])
             if isinstance(ws, list):
                 ws.append("release_gates_failed")

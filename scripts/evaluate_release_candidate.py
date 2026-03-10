@@ -104,13 +104,33 @@ def main() -> int:
 
     required_baselines = ["HOLD_WAIT", "ALWAYS_LONG", "BTC_FOLLOW", "RANDOM_ACTION", "MOMENTUM_SIMPLE", "MEAN_REVERSION_SIMPLE"]
     missing_bench = [k for k in required_baselines if baselines.get(k) is None]
-    if missing_bench:
+
+    failed_benchmarks: list[str] = []
+    if cand:
+        cand_ret = float(cand.get("return_pct", 0.0) or 0.0)
+        for k in required_baselines:
+            bret = baselines.get(k)
+            if bret is not None and cand_ret - float(bret) <= 0.0:
+                failed_benchmarks.append(k)
+
+    if missing_bench or failed_benchmarks:
         gate["passed"] = False
         gate["overall_state"] = "NO_EDGE"
         fails = list(gate.get("failures", []))
-        if "benchmark_evidence_incomplete" not in fails:
+        if missing_bench and "benchmark_evidence_incomplete" not in fails:
             fails.append("benchmark_evidence_incomplete")
+        if failed_benchmarks and "no_benchmark_outperformance" not in fails:
+            fails.append("no_benchmark_outperformance")
         gate["failures"] = fails
+
+    gate["failed_benchmarks"] = failed_benchmarks
+    gate["missing_benchmarks"] = missing_bench
+    if missing_bench:
+        gate["human_reason"] = f"Benchmark evidence incomplete: missing {', '.join(missing_bench)}"
+    elif failed_benchmarks:
+        gate["human_reason"] = f"Candidate did not beat: {', '.join(failed_benchmarks)}"
+    else:
+        gate["human_reason"] = "All required benchmark checks passed"
 
     (promoted_root / "release_gate_report.json").write_text(json.dumps(gate, indent=2), encoding="utf-8")
 

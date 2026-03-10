@@ -410,10 +410,23 @@ class ArtifactAdapter:
     def to_drift_status(self) -> UiDriftStatus:
         final_adv = self._final_advisory_json()
         if isinstance(final_adv, dict) and isinstance(final_adv.get("governance"), dict):
-            gov = final_adv.get("governance", {})
+            gov = dict(final_adv.get("governance", {}))
+            fresh = final_adv.get("freshness", {}) if isinstance(final_adv.get("freshness"), dict) else {}
             status = str(gov.get("overall_status", "WATCH")).upper()
             reasons = gov.get("kill_switch_reasons", []) if isinstance(gov.get("kill_switch_reasons"), list) else []
             ts = str(final_adv.get("updated_at") or final_adv.get("timestamp") or "") or None
+
+            # Normalize drift-facing staleness fields from canonical freshness payload.
+            f_state = str(fresh.get("state", "unknown"))
+            gov.setdefault("artifact_staleness", f_state)
+            gov.setdefault("data_staleness", f_state)
+            fr = fresh.get("reason")
+            if fr:
+                rc = gov.get("reason_codes") if isinstance(gov.get("reason_codes"), list) else []
+                if fr not in rc:
+                    rc.append(str(fr))
+                gov["reason_codes"] = rc
+
             return UiDriftStatus(
                 ok=(status == "OK" and not bool(gov.get("kill_switch_active", False))),
                 warnings=[] if status == "OK" else [f"governance_status={status}"],
@@ -422,7 +435,7 @@ class ArtifactAdapter:
                 schema_versions=self.schema_versions(),
                 governance_status=status,
                 governance_payload=gov,
-                raw={"governance": gov, "freshness": final_adv.get("freshness", {})},
+                raw={"governance": gov, "freshness": fresh},
             )
 
         raw = self.load_raw()

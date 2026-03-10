@@ -228,7 +228,21 @@ with h2:
             unsafe_allow_html=True,
         )
 
-st.markdown(f"**What to do now:** {display_action}. {'Proceed cautiously.' if rec.light in {'WATCH','YELLOW'} else ('Do not act until resolved.' if rec.light=='HALT' else 'Normal advisory confidence.')}  ")
+status_l = str(ui_advice.status or "").lower()
+release_l = str(ui_advice.release_state or "").upper()
+gov_l = str(ui_advice.governance_status or "").upper()
+if status_l in {"no_edge", "stale_cycle", "insufficient_evidence", "missing_signal_bundle"} or release_l in {"NO_EDGE", "LOW_EDGE"}:
+    helper_txt = "Do not act: no reliable edge / reduced trust."
+elif gov_l == "WATCH":
+    helper_txt = "Use reduced trust; advisory is not action-ready yet."
+elif rec.light == "HALT":
+    helper_txt = "Do not act until resolved."
+elif rec.light in {"WATCH", "YELLOW"}:
+    helper_txt = "Proceed cautiously."
+else:
+    helper_txt = "Normal advisory confidence."
+
+st.markdown(f"**What to do now:** {display_action}. {helper_txt}  ")
 st.caption("Ticker refreshes automatically every few seconds via Helius pricing.")
 
 m1, m2, m3, m4 = st.columns(4)

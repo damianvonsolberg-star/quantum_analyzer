@@ -32,10 +32,13 @@ render_headline_card(status, "Governance Status", response)
 st.markdown(f"**What to do now:** {response.upper()}.")
 
 c1, c2, c3 = st.columns(3)
+artifact_staleness = str(gov.get("artifact_staleness", "unknown"))
+data_staleness = str(gov.get("data_staleness", "unknown"))
+
 with c1:
-    render_soft_card("Artifact Staleness", str(gov.get("artifact_staleness", "unknown")))
+    render_soft_card("Artifact Staleness", artifact_staleness)
 with c2:
-    render_soft_card("Data Staleness", str(gov.get("data_staleness", "unknown")))
+    render_soft_card("Data Staleness", data_staleness)
 with c3:
     render_soft_card("Operator Response", response.upper())
 
@@ -60,6 +63,13 @@ if reasons:
         st.error(f"- {r}")
 else:
     st.info("No explicit kill-switch reason reported.")
+
+if artifact_staleness == "unknown" or data_staleness == "unknown":
+    reason_codes = gov.get("reason_codes", []) if isinstance(gov.get("reason_codes"), list) else []
+    if reason_codes:
+        st.info("Staleness unknown reason codes: " + ", ".join(str(x) for x in reason_codes))
+    else:
+        st.info("Staleness unknown: canonical freshness details are unavailable in current payload.")
 
 st.subheader("Recommended operator response")
 if response == "continue advisory":
