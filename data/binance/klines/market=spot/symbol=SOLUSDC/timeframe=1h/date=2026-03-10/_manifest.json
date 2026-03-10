@@ -4,7 +4,7 @@
   "symbol": "SOLUSDC",
   "timeframe": "1h",
   "date": "2026-03-10",
-  "updated_at": "2026-03-10T08:07:21.050507+00:00",
+  "updated_at": "2026-03-10T08:08:38.727154+00:00",
   "entries": [
     {
       "written_at": "2026-03-10T00:00:41.318699+00:00",
@@ -1017,11 +1017,22 @@
         "min_source_ts_ms": 1773122400000,
         "max_source_ts_ms": 1773129600000
       }
+    },
+    {
+      "written_at": "2026-03-10T08:08:38.727145+00:00",
+      "file": "part-20260310T080838515745Z-80633c90.parquet",
+      "rows": 3,
+      "checksum_sha256": "ab092414c8068c6318dd1c3c1e2e2cbe6bc3487cea47933b6f3ef1ab9ad3c42d",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773122400000,
+        "max_source_ts_ms": 1773129600000
+      }
     }
   ],
   "totals": {
-    "files": 92,
-    "rows": 199
+    "files": 93,
+    "rows": 202
   },
   "latest_watermark": {
     "min_source_ts_ms": 1773122400000,
