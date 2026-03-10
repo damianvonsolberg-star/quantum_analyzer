@@ -135,7 +135,17 @@ def sidebar_controls() -> None:
     if st.session_state["artifact_dir_input"] != st.session_state["artifact_dir"]:
         st.session_state["artifact_dir_input"] = st.session_state["artifact_dir"]
 
-    st.session_state["artifact_dir"] = st.sidebar.text_input("Artifact directory", st.session_state["artifact_dir"], key="artifact_dir_input")
+    # Ensure fallback is set BEFORE widget instantiation (Streamlit constraint).
+    prefill = str(st.session_state.get("artifact_dir_input", st.session_state["artifact_dir"]) or "").strip()
+    if not prefill:
+        prefill = latest or st.session_state.get("artifact_dir", "")
+        st.session_state["artifact_dir_input"] = prefill
+
+    st.sidebar.text_input("Artifact directory", key="artifact_dir_input")
+    candidate_dir = str(st.session_state.get("artifact_dir_input", st.session_state["artifact_dir"]) or "").strip()
+    if not candidate_dir:
+        candidate_dir = latest or st.session_state.get("artifact_dir", "")
+    st.session_state["artifact_dir"] = candidate_dir
     persist_artifact_dir(st.session_state["artifact_dir"])
     st.session_state["wallet_address"] = st.sidebar.text_input("Wallet address (BENCHMARK_WALLET)", st.session_state["wallet_address"])
     st.session_state["rpc_url"] = st.sidebar.text_input("Solana RPC URL (SOL_RPC_URL)", st.session_state["rpc_url"])

@@ -1,0 +1,40 @@
+{
+  "dataset": "funding",
+  "market": "futures",
+  "symbol": "SOLUSDT",
+  "timeframe": null,
+  "date": "2026-03-10",
+  "updated_at": "2026-03-10T00:05:10.097266+00:00",
+  "entries": [
+    {
+      "written_at": "2026-03-10T00:00:51.618473+00:00",
+      "file": "part-20260310T000051616204Z-5a55117b.parquet",
+      "rows": 1,
+      "checksum_sha256": "7f5a517c300fa8db17074ce02d911b8b6ee30101ad5f335a44b0dc36f031e91e",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773100800012,
+        "max_source_ts_ms": 1773100800012
+      }
+    },
+    {
+      "written_at": "2026-03-10T00:05:10.097236+00:00",
+      "file": "part-20260310T000510095042Z-7f6e8129.parquet",
+      "rows": 1,
+      "checksum_sha256": "e89bd9978419c4f0b2e46ce5aadbd85a3c63d563baf3824bcb8a640aa1d805b5",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773100800012,
+        "max_source_ts_ms": 1773100800012
+      }
+    }
+  ],
+  "totals": {
+    "files": 2,
+    "rows": 2
+  },
+  "latest_watermark": {
+    "min_source_ts_ms": 1773100800012,
+    "max_source_ts_ms": 1773100800012
+  }
+}

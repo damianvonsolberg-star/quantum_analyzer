@@ -113,7 +113,11 @@ def init_state() -> None:
         st.session_state["artifact_dir"] = hint
         persist_artifact_dir(hint)
     else:
-        st.session_state.setdefault("artifact_dir", default_artifacts)
+        if not current:
+            st.session_state["artifact_dir"] = default_artifacts
+            persist_artifact_dir(default_artifacts)
+        else:
+            st.session_state.setdefault("artifact_dir", default_artifacts)
 
     st.session_state.setdefault("wallet_address", cfg.default_wallet)
     st.session_state.setdefault("rpc_url", cfg.default_rpc)

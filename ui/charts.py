@@ -198,11 +198,12 @@ def signal_price_overlay_chart(price_df: pd.DataFrame, actions_df: pd.DataFrame)
     p0 = price_df.copy()
     p0["ts"] = pd.to_datetime(p0["ts"], errors="coerce", utc=True)
     p0 = p0.dropna(subset=["ts"]).sort_values("ts")
+    p0["ts_label"] = p0["ts"].dt.strftime("%Y-%m-%d %H:%M UTC")
 
     base = alt.Chart(p0).mark_line(color="#4fc3f7", strokeWidth=2.6).encode(
         x=alt.X("ts:T", title="Time", axis=alt.Axis(format="%b %d %H:%M", labelAngle=0)),
         y=alt.Y("close:Q", title="SOLUSDC price"),
-        tooltip=[alt.Tooltip("ts:T", title="Time"), alt.Tooltip("close:Q", title="Price", format=",.2f")],
+        tooltip=[alt.Tooltip("ts_label:N", title="Time"), alt.Tooltip("close:Q", title="Price", format=",.2f")],
     )
 
     if actions_df is None or actions_df.empty or "action" not in actions_df.columns:
@@ -214,6 +215,7 @@ def signal_price_overlay_chart(price_df: pd.DataFrame, actions_df: pd.DataFrame)
         return _chart_style(base.interactive())
     d["ts"] = pd.to_datetime(d[ts_col], errors="coerce", utc=True)
     d = d.dropna(subset=["ts"]).copy()
+    d["ts_label"] = d["ts"].dt.strftime("%Y-%m-%d %H:%M UTC")
     if d.empty:
         return _chart_style(base.interactive())
 
@@ -232,7 +234,11 @@ def signal_price_overlay_chart(price_df: pd.DataFrame, actions_df: pd.DataFrame)
         color=color,
         shape=shape,
         size=alt.Size("size:Q", legend=None),
-        tooltip=[alt.Tooltip("ts:T", title="Time"), alt.Tooltip("action:N", title="Action"), alt.Tooltip("close:Q", title="Price", format=",.2f")],
+        tooltip=[
+            alt.Tooltip("ts_label:N", title="Signal time"),
+            alt.Tooltip("action:N", title="Action"),
+            alt.Tooltip("close:Q", title="Price", format=",.2f"),
+        ],
     )
 
     return _chart_style((base + pts).interactive())
