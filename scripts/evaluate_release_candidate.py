@@ -25,6 +25,58 @@ def _load_top_candidate(explorer_root: Path) -> dict:
     return dict(df.sort_values("leaderboard_rank", ascending=True).iloc[0].to_dict())
 
 
+def _load_registry(explorer_root: Path) -> pd.DataFrame:
+    p = explorer_root / "registry.parquet"
+    if p.exists():
+        try:
+            return pd.read_parquet(p)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
+
+
+def _measured_baseline_returns(cand: dict, registry: pd.DataFrame) -> dict[str, float | None]:
+    out: dict[str, float | None] = {
+        "HOLD_WAIT": None,
+        "ALWAYS_LONG": None,
+        "BTC_FOLLOW": None,
+        "RANDOM_ACTION": None,
+        "MOMENTUM_SIMPLE": None,
+        "MEAN_REVERSION_SIMPLE": None,
+    }
+    if cand:
+        if "baseline_wait_return_pct" in cand:
+            out["HOLD_WAIT"] = float(cand.get("baseline_wait_return_pct") or 0.0)
+        if "baseline_always_long_return_pct" in cand:
+            out["ALWAYS_LONG"] = float(cand.get("baseline_always_long_return_pct") or 0.0)
+        if "baseline_btc_follow_return_pct" in cand:
+            out["BTC_FOLLOW"] = float(cand.get("baseline_btc_follow_return_pct") or 0.0)
+
+    if registry.empty:
+        return out
+
+    def _family_mean(name_fragments: list[str]) -> float | None:
+        if "candidate_family" not in registry.columns or "return_pct" not in registry.columns:
+            return None
+        fam = registry["candidate_family"].astype(str).str.lower()
+        mask = pd.Series(False, index=registry.index)
+        for f in name_fragments:
+            mask = mask | fam.str.contains(f)
+        sub = registry.loc[mask]
+        if sub.empty:
+            return None
+        return float(sub["return_pct"].astype(float).mean())
+
+    if out["RANDOM_ACTION"] is None:
+        out["RANDOM_ACTION"] = _family_mean(["random"])
+    if out["MOMENTUM_SIMPLE"] is None:
+        out["MOMENTUM_SIMPLE"] = _family_mean(["momentum", "trend"])
+    if out["MEAN_REVERSION_SIMPLE"] is None:
+        out["MEAN_REVERSION_SIMPLE"] = _family_mean(["mean_reversion", "reversion"])
+
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--explorer-root", default="artifacts/explorer")
@@ -37,6 +89,9 @@ def main() -> int:
     promoted_root.mkdir(parents=True, exist_ok=True)
 
     cand = _load_top_candidate(explorer_root)
+    registry = _load_registry(explorer_root)
+    baselines = _measured_baseline_returns(cand, registry)
+
     if not cand:
         gate = {
             "passed": False,
@@ -47,40 +102,32 @@ def main() -> int:
     else:
         gate = evaluate_release_gates(cand).to_dict()
 
+    required_baselines = ["HOLD_WAIT", "ALWAYS_LONG", "BTC_FOLLOW", "RANDOM_ACTION", "MOMENTUM_SIMPLE", "MEAN_REVERSION_SIMPLE"]
+    missing_bench = [k for k in required_baselines if baselines.get(k) is None]
+    if missing_bench:
+        gate["passed"] = False
+        gate["overall_state"] = "NO_EDGE"
+        fails = list(gate.get("failures", []))
+        if "benchmark_evidence_incomplete" not in fails:
+            fails.append("benchmark_evidence_incomplete")
+        gate["failures"] = fails
+
     (promoted_root / "release_gate_report.json").write_text(json.dumps(gate, indent=2), encoding="utf-8")
 
     # benchmark comparison artifact
-    rows = [{
-        "benchmark": "HOLD_WAIT",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": float(cand.get("baseline_wait_return_pct", 0.0) if cand else 0.0),
-        "lift_pct": float((cand.get("return_pct", 0.0) - cand.get("baseline_wait_return_pct", 0.0)) if cand else 0.0),
-    }, {
-        "benchmark": "ALWAYS_LONG",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": float(cand.get("baseline_always_long_return_pct", 0.0) if cand else 0.0),
-        "lift_pct": float((cand.get("return_pct", 0.0) - cand.get("baseline_always_long_return_pct", 0.0)) if cand else 0.0),
-    }, {
-        "benchmark": "BTC_FOLLOW",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": float(cand.get("baseline_btc_follow_return_pct", 0.0) if cand else 0.0),
-        "lift_pct": float((cand.get("return_pct", 0.0) - cand.get("baseline_btc_follow_return_pct", 0.0)) if cand else 0.0),
-    }, {
-        "benchmark": "RANDOM_ACTION",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": 0.0,
-        "lift_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-    }, {
-        "benchmark": "MOMENTUM_SIMPLE",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": 0.0,
-        "lift_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-    }, {
-        "benchmark": "MEAN_REVERSION_SIMPLE",
-        "candidate_return_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-        "benchmark_return_pct": 0.0,
-        "lift_pct": float(cand.get("return_pct", 0.0) if cand else 0.0),
-    }]
+    cand_ret = float(cand.get("return_pct", 0.0) if cand else 0.0)
+    rows = []
+    for bench in required_baselines:
+        bret = baselines.get(bench)
+        rows.append(
+            {
+                "benchmark": bench,
+                "candidate_return_pct": cand_ret,
+                "benchmark_return_pct": (float(bret) if bret is not None else None),
+                "lift_pct": (cand_ret - float(bret)) if bret is not None else None,
+                "available": bret is not None,
+            }
+        )
     pd.DataFrame(rows).to_csv(promoted_root / "benchmark_comparison.csv", index=False)
 
     reliability = {

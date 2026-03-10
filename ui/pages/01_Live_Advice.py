@@ -179,7 +179,8 @@ if ui_advice.status:
         rec.top_risks = list(ui_advice.invalidation_notes)
 
 portfolio_advice = None
-if snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None and ui_advice.target_position is not None:
+action_eligible = (str(ui_advice.status or "").lower() == "approved") and (ui_advice.headline_action in {"BUY", "REDUCE", "HOLD"})
+if action_eligible and snap.ok and snap.total_nav_usd is not None and snap.sol_price_usd is not None and ui_advice.target_position is not None:
     from ui.portfolio import PortfolioSnapshot
 
     ps = PortfolioSnapshot(
