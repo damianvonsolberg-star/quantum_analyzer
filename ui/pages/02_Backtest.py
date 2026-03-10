@@ -30,7 +30,7 @@ from ui.charts import (
     signal_price_overlay_chart,
 )
 from ui.components import artifact_banner, render_soft_card, sidebar_controls
-from ui.state import init_state, persist_artifact_dir
+from ui.state import init_state, persist_artifact_dir, latest_operator_artifact_dir
 
 
 st.set_page_config(page_title="Backtest", layout="wide")
@@ -39,6 +39,11 @@ sidebar_controls()
 st.title("Backtest · Performance Lab")
 st.caption("Advanced diagnostics are below; headline advisory remains on Live Advice.")
 artifact_banner()
+
+latest_dir = latest_operator_artifact_dir()
+if latest_dir and st.session_state.get("artifact_dir") != latest_dir:
+    st.session_state["artifact_dir"] = latest_dir
+    persist_artifact_dir(latest_dir)
 
 selected_artifact_dir = st.session_state["artifact_dir"]
 adapter = ArtifactAdapter(selected_artifact_dir)
@@ -79,6 +84,14 @@ if adv_p.exists():
 st.caption(f"Advisory source timestamp: {adv_ts} · Chart source run: {chart_source_run}")
 st.caption(f"Advisory source id/path: {adv_src}")
 st.caption(f"Chart source timestamp: {artifact_ts or 'n/a'} · Split reason: {split_reason}")
+if not actions.empty and "ts" in actions.columns:
+    try:
+        ts_last = pd.to_datetime(actions["ts"], utc=True, errors="coerce").dropna().max()
+        if ts_last is not pd.NaT and ts_last is not None:
+            lag_h = (pd.Timestamp.utcnow().tz_localize("UTC") - ts_last).total_seconds() / 3600.0
+            st.caption(f"Last visible signal time: {ts_last.isoformat()} (lag: {lag_h:.1f}h)")
+    except Exception:
+        pass
 
 
 def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:
@@ -202,7 +215,8 @@ if equity.empty and actions.empty:
                 snapshot_id = str(rr.iloc[0].get("snapshot_id", ""))
                 if snapshot_id:
                     feats = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
-                    c = feats[["close"]].copy().tail(24)
+                    # keep substantial history visible when no actionable signals are emitted
+                    c = feats[["close"]].copy().tail(24 * 14)
                     c = c.reset_index().rename(columns={"index": "ts"}) if "ts" not in c.columns else c
                     if "ts" not in c.columns:
                         c["ts"] = feats.index[-len(c):]
