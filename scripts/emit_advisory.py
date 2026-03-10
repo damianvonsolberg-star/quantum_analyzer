@@ -55,10 +55,10 @@ def main() -> int:
             "risk_notes": ["No promoted signal bundle available."],
             "alternatives": [],
             "invalidation": [],
-            "symbol": "SOLUSDC",
-            "timeframe": "1h",
+            "symbol": None,
+            "timeframe": None,
             "source_ids": {},
-            "warnings": ["advisory_only"],
+            "warnings": ["advisory_only", "missing_signal_bundle", "missing_symbol_semantics", "missing_timeframe_semantics"],
         }
     else:
         b = json.loads(bundle_path.read_text(encoding="utf-8"))
@@ -111,6 +111,32 @@ def main() -> int:
         except Exception:
             rg = None
 
+    # release-gate presence is mandatory for actionable trust semantics.
+    if rg is None:
+        out.update({
+            "status": "insufficient_evidence",
+            "action_raw": "WAIT",
+            "action_spot": "WAIT",
+            "action": "WAIT",
+            "target_position_raw": None,
+            "target_position_spot": None,
+            "target_position": None,
+            "reason": "missing_release_gate_report",
+            "release_state": "NO_EDGE",
+            "release_gate": {
+                "passed": False,
+                "overall_state": "NO_EDGE",
+                "failures": ["missing_release_gate_report"],
+                "failed_benchmarks": [],
+                "missing_benchmarks": [],
+                "human_reason": "Release gate report missing",
+            },
+            "release_gate_failures": ["missing_release_gate_report"],
+        })
+        ws = out.setdefault("warnings", [])
+        if isinstance(ws, list):
+            ws.append("missing_release_gate_report")
+
     # semantic completeness gate: missing core measured semantics -> insufficient evidence
     missing_semantics = []
     if out.get("target_position") is None:
@@ -141,6 +167,7 @@ def main() -> int:
             "failures": rg.get("failures", []),
             "failed_benchmarks": rg.get("failed_benchmarks", []),
             "missing_benchmarks": rg.get("missing_benchmarks", []),
+            "proxy_benchmarks": rg.get("proxy_benchmarks", []),
             "human_reason": rg.get("human_reason"),
         }
         if not bool(rg.get("passed", False)):

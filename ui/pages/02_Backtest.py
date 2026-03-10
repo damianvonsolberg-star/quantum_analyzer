@@ -38,6 +38,7 @@ selected_artifact_dir = st.session_state["artifact_dir"]
 adapter = ArtifactAdapter(selected_artifact_dir)
 raw = adapter.load_raw()
 chart_source_run = Path(selected_artifact_dir).name if selected_artifact_dir else "unknown"
+split_reason = "none"
 summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
 bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
 equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else pd.DataFrame()
@@ -61,6 +62,7 @@ if equity.empty and actions.empty:
             actions = raw.get("actions") if isinstance(raw.get("actions"), pd.DataFrame) else pd.DataFrame()
             templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFrame) else pd.DataFrame()
             chart_source_run = latest_rich.name
+            split_reason = "latest_advisory_run_not_chartable_no_actions_or_equity"
             st.info(f"Backtest page auto-switched to latest chartable run: {latest_rich.name}")
 
 artifact_ts = None
@@ -84,6 +86,7 @@ if adv_p.exists():
         pass
 st.caption(f"Advisory source timestamp: {adv_ts} · Chart source run: {chart_source_run}")
 st.caption(f"Advisory source id/path: {adv_src}")
+st.caption(f"Chart source timestamp: {artifact_ts or 'n/a'} · Split reason: {split_reason}")
 
 
 def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:

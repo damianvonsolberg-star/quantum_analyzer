@@ -4,7 +4,7 @@
   "symbol": "SOLUSDT",
   "timeframe": null,
   "date": "2026-03-10",
-  "updated_at": "2026-03-10T09:16:07.185513+00:00",
+  "updated_at": "2026-03-10T10:04:33.737114+00:00",
   "entries": [
     {
       "written_at": "2026-03-10T00:00:51.618473+00:00",
@@ -489,11 +489,110 @@
         "min_source_ts_ms": 1773129600002,
         "max_source_ts_ms": 1773129600002
       }
+    },
+    {
+      "written_at": "2026-03-10T09:21:48.236938+00:00",
+      "file": "part-20260310T092148233812Z-b57ad613.parquet",
+      "rows": 1,
+      "checksum_sha256": "f594d44b567e1e61c42ce0daf703336e9a4a6d0fa1413faa2f767ef475fa7492",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:27:26.446131+00:00",
+      "file": "part-20260310T092726442430Z-8e5e0f78.parquet",
+      "rows": 1,
+      "checksum_sha256": "58417b9e889c5722e1ccd9e9686dfa1204b114160276f14fc551ca0851db17eb",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:33:04.089091+00:00",
+      "file": "part-20260310T093304086653Z-063db0d8.parquet",
+      "rows": 1,
+      "checksum_sha256": "6388b9246594cd0b454c0693229db51ba8620ae5ceb4b76b53e84f6dd52f1d57",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:38:41.437032+00:00",
+      "file": "part-20260310T093841432684Z-c80cab8a.parquet",
+      "rows": 1,
+      "checksum_sha256": "cb1086499704b7b8fbc980f4013ebb90f22c31d83d9602f55a35635d1f2395ca",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:44:19.137011+00:00",
+      "file": "part-20260310T094419133115Z-88598066.parquet",
+      "rows": 1,
+      "checksum_sha256": "3dd85a4680c06b9cc592a97f59c30257487f172a2b0471120ecd7fc4877e7a9a",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:49:56.446292+00:00",
+      "file": "part-20260310T094956443077Z-34b7c2d3.parquet",
+      "rows": 1,
+      "checksum_sha256": "0c89815308c6a3ad80ada3da71d998040e02b4f4377014125c4752b89f13f019",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T09:55:32.293437+00:00",
+      "file": "part-20260310T095532289729Z-2374dc3e.parquet",
+      "rows": 1,
+      "checksum_sha256": "e0b07e3d9fb5a6f8c5414addee4f1bb64505675fb6964b14c8ba52f7e53e7c70",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:01:08.937430+00:00",
+      "file": "part-20260310T100108934202Z-10d9c34e.parquet",
+      "rows": 1,
+      "checksum_sha256": "2b3f696c4dada834b7ce5be96fb01c276dcbebf05540f25c7e5f02b50245be9d",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:04:33.737078+00:00",
+      "file": "part-20260310T100433733957Z-e8877678.parquet",
+      "rows": 1,
+      "checksum_sha256": "9587b75a37f568fd46e09629d91a656edb4862b773b5a19496e4475b87e0eedd",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129600002,
+        "max_source_ts_ms": 1773129600002
+      }
     }
   ],
   "totals": {
-    "files": 44,
-    "rows": 44
+    "files": 53,
+    "rows": 53
   },
   "latest_watermark": {
     "min_source_ts_ms": 1773129600002,

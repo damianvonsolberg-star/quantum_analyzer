@@ -235,6 +235,12 @@ class ArtifactAdapter:
             else:
                 traffic = "yellow"
 
+            inv = (final_adv.get("invalidation", []) if isinstance(final_adv.get("invalidation"), list) else [])
+            rg = final_adv.get("release_gate", {}) if isinstance(final_adv.get("release_gate"), dict) else {}
+            hr = rg.get("human_reason")
+            if hr and str(hr) not in inv:
+                inv = list(inv) + [str(hr)]
+
             return UiLiveAdvice(
                 timestamp=ts,
                 headline_action=action,
@@ -249,7 +255,7 @@ class ArtifactAdapter:
                 advisory_mode="spot_only",
                 target_scope="advisory_sleeve",
                 top_alternatives=(final_adv.get("alternatives", []) if isinstance(final_adv.get("alternatives"), list) else []),
-                invalidation_notes=(final_adv.get("invalidation", []) if isinstance(final_adv.get("invalidation"), list) else []),
+                invalidation_notes=inv,
                 status=str(final_adv.get("status")) if final_adv.get("status") is not None else None,
                 release_state=release_state or None,
                 governance_status=(str(gov.get("overall_status")).upper() if gov.get("overall_status") else None),
