@@ -272,8 +272,8 @@ else:
         render_soft_card("Target spot allocation", (f"{ui_advice.target_position*100:.2f}%" if ui_advice.target_position is not None else "n/a"))
 
 s1, s2, s3 = st.columns(3)
-s1.metric("Confidence", f"{(ui_advice.confidence or 0.0):.2f}")
-s2.metric("Entropy", f"{(ui_advice.entropy or 0.0):.2f}")
+s1.metric("Confidence", (f"{ui_advice.confidence:.2f}" if ui_advice.confidence is not None else "n/a"))
+s2.metric("Entropy", (f"{ui_advice.entropy:.2f}" if ui_advice.entropy is not None else "n/a"))
 edge_txt = f"{ui_advice.expected_edge_bps:.2f}" if ui_advice.expected_edge_bps is not None else "n/a"
 cost_txt = f"{ui_advice.expected_cost_bps:.2f}" if ui_advice.expected_cost_bps is not None else "n/a"
 s3.metric("Edge vs Cost (bps)", f"{edge_txt} / {cost_txt}")

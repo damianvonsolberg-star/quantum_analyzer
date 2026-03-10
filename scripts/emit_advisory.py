@@ -46,7 +46,7 @@ def main() -> int:
             "target_position_raw": None,
             "target_position_spot": None,
             "target_position": None,
-            "confidence": 0.0,
+            "confidence": None,
             "entropy": None,
             "expected_edge_bps": None,
             "expected_cost_bps": None,
@@ -81,7 +81,7 @@ def main() -> int:
             "target_position_raw": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
             "target_position_spot": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
             "target_position": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
-            "confidence": float(b.get("confidence", 0.0) or 0.0),
+            "confidence": (float(b.get("confidence")) if isinstance(b.get("confidence"), (float, int)) else None),
             "entropy": supporting.get("entropy", None),
             "expected_edge_bps": edge_bps,
             "expected_cost_bps": (float(cost_bps) if isinstance(cost_bps, (float, int)) else None),
@@ -178,7 +178,7 @@ def main() -> int:
                 "target_position_raw": None,
                 "target_position_spot": None,
                 "target_position": None,
-                "confidence": min(float(out.get("confidence", 0.0) or 0.0), 0.2),
+                "confidence": (min(float(out.get("confidence")), 0.2) if isinstance(out.get("confidence"), (float, int)) else None),
                 "reason": "release_gates_failed",
                 "release_state": rg.get("overall_state", "NO_EDGE"),
                 "release_gate_failures": rg.get("failures", []),
@@ -199,7 +199,7 @@ def main() -> int:
             "target_position_raw": None,
             "target_position_spot": None,
             "target_position": None,
-            "confidence": min(float(out.get("confidence", 0.0) or 0.0), 0.2),
+            "confidence": (min(float(out.get("confidence")), 0.2) if isinstance(out.get("confidence"), (float, int)) else None),
             "reason": stale_reason,
         })
         ws = out.setdefault("warnings", [])
@@ -207,7 +207,7 @@ def main() -> int:
             ws.append("research_cycle_stale_or_failed")
 
     out["governance"] = {
-        "overall_status": "OK" if out.get("status") not in {"stale_cycle", "no_edge", "missing_signal_bundle"} else "WATCH",
+        "overall_status": "OK" if out.get("status") not in {"stale_cycle", "no_edge", "missing_signal_bundle", "insufficient_evidence"} else "WATCH",
         "kill_switch_active": bool(out.get("status") in {"stale_cycle", "no_edge", "missing_signal_bundle"}),
         "kill_switch_reasons": out.get("release_gate_failures", []) if isinstance(out.get("release_gate_failures"), list) else [],
     }

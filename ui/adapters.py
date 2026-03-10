@@ -246,6 +246,8 @@ class ArtifactAdapter:
                 headline_action=action,
                 traffic_light=traffic,
                 target_position=(float(final_adv.get("target_position")) if isinstance(final_adv.get("target_position"), (float, int)) else None),
+                target_position_raw=(float(final_adv.get("target_position_raw")) if isinstance(final_adv.get("target_position_raw"), (float, int)) else None),
+                target_position_spot=(float(final_adv.get("target_position_spot")) if isinstance(final_adv.get("target_position_spot"), (float, int)) else None),
                 expected_edge_bps=edge,
                 expected_cost_bps=cost,
                 confidence=conf,

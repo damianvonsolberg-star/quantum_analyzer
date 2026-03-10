@@ -4,7 +4,7 @@
   "symbol": "BTCUSDC",
   "timeframe": null,
   "date": "2026-03-10",
-  "updated_at": "2026-03-10T10:15:50.761397+00:00",
+  "updated_at": "2026-03-10T10:56:46.801293+00:00",
   "entries": [
     {
       "written_at": "2026-03-10T00:00:51.350161+00:00",
@@ -1303,14 +1303,113 @@
         "min_source_ts_ms": 1773129088892,
         "max_source_ts_ms": 1773137727755
       }
+    },
+    {
+      "written_at": "2026-03-10T10:17:58.567793+00:00",
+      "file": "part-20260310T101758428301Z-564676e3.parquet",
+      "rows": 49112,
+      "checksum_sha256": "7fd99df2ea9c5b58868e81ff6f6a9edda0857790770bbcf7c100341a3657b49b",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129218833,
+        "max_source_ts_ms": 1773137855383
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:22:31.350676+00:00",
+      "file": "part-20260310T102231189877Z-0e44567a.parquet",
+      "rows": 48567,
+      "checksum_sha256": "42915c1081db60c3c9ee29a81966be07fb23f1a2183c8355a767bcb5c759fe47",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129489913,
+        "max_source_ts_ms": 1773138125564
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:23:35.825097+00:00",
+      "file": "part-20260310T102335680281Z-7f781f0d.parquet",
+      "rows": 48745,
+      "checksum_sha256": "ce8b6c119f6899aec7c25c13747ab2089e7e7324952090486308373d72684093",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129553837,
+        "max_source_ts_ms": 1773138191893
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:29:12.175426+00:00",
+      "file": "part-20260310T102912033941Z-f176e1ee.parquet",
+      "rows": 48258,
+      "checksum_sha256": "ebba4f0274b49ca5842b9575c2c23ebf6b4aa3464a8a15a1372d08e4abceb5ad",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129891533,
+        "max_source_ts_ms": 1773138528591
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:34:49.567893+00:00",
+      "file": "part-20260310T103449444302Z-d62ca050.parquet",
+      "rows": 43827,
+      "checksum_sha256": "0af3812cae52dec6e293a97e3267f3b4b9ff9b4eb6a2a382f5d0d6026c67363e",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773130227655,
+        "max_source_ts_ms": 1773138864433
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:40:25.630225+00:00",
+      "file": "part-20260310T104025506750Z-9f41b598.parquet",
+      "rows": 43156,
+      "checksum_sha256": "9f63725ba0b129c4d6318262d4c792d43b915ae93e0f4c177f7c24742ec291cd",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773130565041,
+        "max_source_ts_ms": 1773139203748
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:46:02.795199+00:00",
+      "file": "part-20260310T104602676745Z-6cbd1ab3.parquet",
+      "rows": 42263,
+      "checksum_sha256": "bc175028acdaed58aaf7369b45210e62bc265a04ee1b8c792acabbe4ef34c6fa",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773130901228,
+        "max_source_ts_ms": 1773139539933
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:51:38.520759+00:00",
+      "file": "part-20260310T105138403704Z-67276961.parquet",
+      "rows": 40603,
+      "checksum_sha256": "84b312a0526e1134a06ec1bc4369e0b8ab7b1172875dd6aaa8395db58990c0ed",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773131242351,
+        "max_source_ts_ms": 1773139877733
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:56:46.786947+00:00",
+      "file": "part-20260310T105646648990Z-45cb7359.parquet",
+      "rows": 40045,
+      "checksum_sha256": "3f28820d42c9f653e7d5e48002d0d7040a38fb2b6201b6a4ca3ed9757f8c1278",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773131550439,
+        "max_source_ts_ms": 1773140173175
+      }
     }
   ],
   "totals": {
-    "files": 118,
-    "rows": 3882569
+    "files": 127,
+    "rows": 4287145
   },
   "latest_watermark": {
-    "min_source_ts_ms": 1773129088892,
-    "max_source_ts_ms": 1773137727755
+    "min_source_ts_ms": 1773131550439,
+    "max_source_ts_ms": 1773140173175
   }
 }

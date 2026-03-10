@@ -19,11 +19,13 @@ class UiLiveAdvice:
     headline_action: str
     traffic_light: str
     target_position: float | None
-    expected_edge_bps: float | None
-    expected_cost_bps: float | None
-    confidence: float | None
-    entropy: float | None
-    risk_note: str
+    target_position_raw: float | None = None
+    target_position_spot: float | None = None
+    expected_edge_bps: float | None = None
+    expected_cost_bps: float | None = None
+    confidence: float | None = None
+    entropy: float | None = None
+    risk_note: str = ""
     reasons: list[str] = field(default_factory=list)
     advisory_mode: str = "spot_only"
     target_scope: str = "advisory_sleeve"
