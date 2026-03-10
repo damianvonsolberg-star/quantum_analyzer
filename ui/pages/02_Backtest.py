@@ -51,25 +51,11 @@ equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else p
 actions = raw.get("actions") if isinstance(raw.get("actions"), pd.DataFrame) else pd.DataFrame()
 templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFrame) else pd.DataFrame()
 
-# Backtest page should prefer a run with chartable outputs.
+# Keep the selected/latest advisory run as source-of-truth.
+# If it has no emitted actions/equity, we use replay/visibility fallbacks below
+# instead of silently jumping to an older chartable run.
 if equity.empty and actions.empty:
-    exp_root = ROOT / "artifacts" / "explorer" / "experiments"
-    if exp_root.exists():
-        candidates = [d for d in exp_root.iterdir() if d.is_dir() and (d / "artifact_bundle.json").exists() and (d / "equity_curve.csv").exists() and (d / "actions.csv").exists()]
-        if candidates:
-            latest_rich = sorted(candidates, key=lambda d: d.stat().st_mtime, reverse=True)[0]
-            st.session_state["artifact_dir"] = str(latest_rich)
-            persist_artifact_dir(str(latest_rich))
-            adapter = ArtifactAdapter(str(latest_rich))
-            raw = adapter.load_raw()
-            summary = raw.get("summary") if isinstance(raw.get("summary"), dict) else {}
-            bundle = raw.get("bundle") if isinstance(raw.get("bundle"), dict) else {}
-            equity = raw.get("equity") if isinstance(raw.get("equity"), pd.DataFrame) else pd.DataFrame()
-            actions = raw.get("actions") if isinstance(raw.get("actions"), pd.DataFrame) else pd.DataFrame()
-            templates = raw.get("templates") if isinstance(raw.get("templates"), pd.DataFrame) else pd.DataFrame()
-            chart_source_run = latest_rich.name
-            split_reason = "latest_advisory_run_not_chartable_no_actions_or_equity"
-            st.info(f"Backtest page auto-switched to latest chartable run: {latest_rich.name}")
+    split_reason = "latest_advisory_run_not_chartable_no_actions_or_equity"
 
 artifact_ts = None
 if isinstance(bundle.get("artifact_meta"), dict):
