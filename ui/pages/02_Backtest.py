@@ -7,12 +7,18 @@ import json
 
 import pandas as pd
 import streamlit as st
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ui.adapters import AdapterValidationError, ArtifactAdapter
+from quantum_analyzer.backtest.engine import BacktestConfig
+from quantum_analyzer.backtest.walkforward import WalkForwardConfig
+from quantum_analyzer.experiments.evaluator import build_candidate, evaluate_candidate
+from quantum_analyzer.features.feature_store import load_feature_snapshot
+from quantum_analyzer.features.subsets import resolve_feature_subset
 from ui.charts import (
     action_hist_chart,
     compute_drawdown,
@@ -110,6 +116,98 @@ def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:
 
 equity = _normalize_ts(equity, "ts")
 actions = _normalize_ts(actions, "ts")
+
+
+def _try_recompute_replay(run_id: str) -> tuple[pd.DataFrame, pd.DataFrame, str | None]:
+    try:
+        reg_p = ROOT / "artifacts" / "explorer" / "registry.parquet"
+        if not reg_p.exists():
+            return pd.DataFrame(), pd.DataFrame(), "registry_missing"
+        reg = pd.read_parquet(reg_p)
+        row = reg.loc[reg["experiment_id"] == run_id]
+        if row.empty:
+            return pd.DataFrame(), pd.DataFrame(), "run_not_in_registry"
+        r = row.iloc[0]
+        snapshot_id = str(r.get("snapshot_id", ""))
+        feature_subset = str(r.get("feature_subset", "full_stack"))
+        regime_slice = str(r.get("regime_slice", "all"))
+        horizon = int(r.get("horizon", 12) or 12)
+        window_bars = int(r.get("window_bars", 720) or 720)
+        test_bars = int(r.get("test_bars", 120) or 120)
+        policy = r.get("policy_params", {}) or {}
+
+        feats_full = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
+        close = feats_full["close"].astype(float)
+        f_all = feats_full.tail(window_bars).copy()
+        c_all = close.reindex(f_all.index).copy()
+
+        # regime slice on full frame first
+        if regime_slice == "all":
+            mask = pd.Series(True, index=f_all.index)
+        else:
+            if "realized_vol_24h" not in f_all.columns:
+                return pd.DataFrame(), pd.DataFrame(), "missing_realized_vol_for_regime_slice"
+            vol = f_all["realized_vol_24h"].astype(float)
+            q1 = float(vol.quantile(0.33))
+            q2 = float(vol.quantile(0.66))
+            if regime_slice == "low_vol":
+                mask = vol <= q1
+            elif regime_slice == "mid_vol":
+                mask = (vol > q1) & (vol <= q2)
+            elif regime_slice == "high_vol":
+                mask = vol > q2
+            else:
+                return pd.DataFrame(), pd.DataFrame(), f"unknown_regime_slice:{regime_slice}"
+        f_reg = f_all.loc[mask].copy()
+        c_reg = c_all.reindex(f_reg.index).copy()
+        if f_reg.empty:
+            return pd.DataFrame(), pd.DataFrame(), "empty_after_regime_slice"
+
+        cols = resolve_feature_subset(feature_subset)
+        missing = [c for c in cols if c not in f_reg.columns]
+        if missing:
+            return pd.DataFrame(), pd.DataFrame(), f"missing_subset_cols:{','.join(missing[:5])}"
+        f = f_reg[cols].copy()
+        c = c_reg.copy()
+
+        fam = str((policy.get("candidate_family") or r.get("candidate_family") or "trend"))
+        params = dict(policy.get("candidate_params", {}) or {})
+        candidate_id = str(r.get("candidate_id") or f"replay:{run_id}")
+        candidate = build_candidate(candidate_id, fam, params, feature_subset, horizon, regime_slice)
+
+        wf = WalkForwardConfig(
+            train_bars=max(test_bars * 5, int(test_bars * 1.5)),
+            test_bars=test_bars,
+            purge_bars=6,
+            embargo_bars=6,
+        )
+        bt = BacktestConfig(
+            turnover_cap=float((policy.get("turnover_cap") if isinstance(policy, dict) else None) or 0.1),
+            round_trip_cost_bps=float((policy.get("round_trip_cost_bps") if isinstance(policy, dict) else None) or 20.0),
+            initial_equity=1_000_000.0,
+            symbol=str(r.get("price_source_symbol") or "SOLUSDT"),
+        )
+
+        with tempfile.TemporaryDirectory(prefix="qa_replay_") as td:
+            _ = evaluate_candidate(features=f, close=c, candidate=candidate, walkforward=wf, backtest=bt, out_dir=td)
+            eq_p = Path(td) / "equity_curve.csv"
+            ac_p = Path(td) / "actions.csv"
+            if not (eq_p.exists() and ac_p.exists()):
+                return pd.DataFrame(), pd.DataFrame(), "replay_artifacts_missing"
+            eq = pd.read_csv(eq_p)
+            ac = pd.read_csv(ac_p)
+            return eq, ac, None
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame(), f"replay_error:{e}"
+
+
+if equity.empty and actions.empty:
+    eq2, ac2, err = _try_recompute_replay(chart_source_run)
+    if not eq2.empty or not ac2.empty:
+        equity, actions = _normalize_ts(eq2, "ts"), _normalize_ts(ac2, "ts")
+        st.info("Replay mode: showing recomputed timeline from fresh features + current logic (not emitted actions.csv).")
+    elif err:
+        st.warning(f"Replay mode unavailable: {err}")
 
 # filters
 f1, f2, f3, f4 = st.columns(4)

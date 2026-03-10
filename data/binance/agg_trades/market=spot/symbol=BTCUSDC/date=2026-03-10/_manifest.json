@@ -4,7 +4,7 @@
   "symbol": "BTCUSDC",
   "timeframe": null,
   "date": "2026-03-10",
-  "updated_at": "2026-03-10T10:04:33.461563+00:00",
+  "updated_at": "2026-03-10T10:15:50.761397+00:00",
   "entries": [
     {
       "written_at": "2026-03-10T00:00:51.350161+00:00",
@@ -1270,14 +1270,47 @@
         "min_source_ts_ms": 1773128411849,
         "max_source_ts_ms": 1773137049833
       }
+    },
+    {
+      "written_at": "2026-03-10T10:06:45.507956+00:00",
+      "file": "part-20260310T100645365416Z-95d4559e.parquet",
+      "rows": 49830,
+      "checksum_sha256": "b9875a2fc2ed9ced0a974460a247403c14b12276ebbda06a275a27f7ed00a296",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773128544902,
+        "max_source_ts_ms": 1773137182769
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:12:23.131395+00:00",
+      "file": "part-20260310T101222988502Z-d7e10249.parquet",
+      "rows": 49493,
+      "checksum_sha256": "078964bf4348bb963c1fecb1dbbf6e99eb5d894316772220761963e2f8cb87fe",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773128880597,
+        "max_source_ts_ms": 1773137512524
+      }
+    },
+    {
+      "written_at": "2026-03-10T10:15:50.754755+00:00",
+      "file": "part-20260310T101550613119Z-e39b9d40.parquet",
+      "rows": 48880,
+      "checksum_sha256": "b48f9c251924e54063d69eb94adac09be1b9e21c939e6123c979e0c2b337c56f",
+      "run_mode": "append",
+      "watermark": {
+        "min_source_ts_ms": 1773129088892,
+        "max_source_ts_ms": 1773137727755
+      }
     }
   ],
   "totals": {
-    "files": 115,
-    "rows": 3734366
+    "files": 118,
+    "rows": 3882569
   },
   "latest_watermark": {
-    "min_source_ts_ms": 1773128411849,
-    "max_source_ts_ms": 1773137049833
+    "min_source_ts_ms": 1773129088892,
+    "max_source_ts_ms": 1773137727755
   }
 }
