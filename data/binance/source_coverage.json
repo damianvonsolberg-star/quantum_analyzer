@@ -1,9 +1,9 @@
 {
   "schema_version": "1.1.0",
-  "start_ms": 1773131548273,
-  "end_ms": 1773140188273,
+  "start_ms": 1773138375678,
+  "end_ms": 1773147015678,
   "coverage": {
-    "agg_trades": 0.9985798611111111,
+    "agg_trades": 0.9999866898148149,
     "book_ticker": 0.0,
     "open_interest": 0.0,
     "basis": 0.0,

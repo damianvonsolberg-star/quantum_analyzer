@@ -1,7 +1,31 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 from .candidate_grid import expand_candidate_grid
 from .specs import ExperimentSpec
+
+
+def _balanced_candidate_sample(candidates: list[dict], limit: int) -> list[dict]:
+    """Round-robin across family+horizon buckets to avoid truncation bias."""
+    buckets: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for c in candidates:
+        buckets[(str(c.get("family")), int(c.get("horizon", 0)))].append(c)
+
+    out: list[dict] = []
+    keys = sorted(buckets.keys())
+    i = 0
+    while len(out) < limit and keys:
+        k = keys[i % len(keys)]
+        b = buckets.get(k, [])
+        if b:
+            out.append(b.pop(0))
+            if not b:
+                keys = [x for x in keys if x != k]
+                i = 0
+                continue
+        i += 1
+    return out
 
 
 def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
@@ -33,9 +57,9 @@ def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
     )
     # bound runtime for continuous operator cycle
     if preset == "fast":
-        candidate_grid = candidate_grid[:24]
+        candidate_grid = _balanced_candidate_sample(candidate_grid, 24)
     elif preset == "daily":
-        candidate_grid = candidate_grid[:96]
+        candidate_grid = _balanced_candidate_sample(candidate_grid, 96)
 
     specs: list[ExperimentSpec] = []
     for w in windows:

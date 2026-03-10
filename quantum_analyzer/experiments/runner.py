@@ -88,9 +88,14 @@ def run_experiments(
             f_all, c_all = _slice_window(feat_src, close, spec.window_bars)
             f_reg, c = _apply_regime_slice(f_all, c_all, spec.regime_slice)
             f = _apply_feature_subset(f_reg, spec.feature_subset)
+            n = int(len(f))
+            # Adaptive geometry avoids hidden zero-split outcomes after regime slicing.
+            test_bars = max(24, min(int(spec.test_bars), max(24, n // 5)))
+            train_guess = max(spec.window_bars - spec.test_bars, test_bars * 2)
+            train_bars = max(test_bars * 2, min(int(train_guess), max(test_bars * 2, n - test_bars - 12)))
             wf = WalkForwardConfig(
-                train_bars=max(spec.window_bars - spec.test_bars, 10),
-                test_bars=spec.test_bars,
+                train_bars=train_bars,
+                test_bars=test_bars,
                 purge_bars=6,
                 embargo_bars=6,
             )

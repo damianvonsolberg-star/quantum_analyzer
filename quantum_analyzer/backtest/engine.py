@@ -81,6 +81,7 @@ class BacktestConfig:
     round_trip_cost_bps: float = 15.0
     initial_equity: float = 1_000_000.0
     symbol: str = "SOLUSDT"
+    strict_candidate_errors: bool = True
 
 
 @dataclass
@@ -278,7 +279,11 @@ def run_backtest(
 
     summary = {
         "bars": len(features),
+        "split_count": len(splits),
         "test_bars": len(all_test_indices),
+        "hold_ratio": hold_ratio,
+        "hold_lock_detected": bool(hold_ratio > 0.95),
+        "hold_lock_reasons": hold_lock_reasons,
         "ending_equity": float(eq_df["equity"].iloc[-1]) if not eq_df.empty else bt_cfg.initial_equity,
         "return_pct": float(eq_df["equity"].iloc[-1] / bt_cfg.initial_equity - 1.0) if not eq_df.empty else 0.0,
         "diagnostics": diag.to_dict(),
