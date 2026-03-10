@@ -8,9 +8,14 @@ from .specs import ExperimentSpec
 
 def _balanced_candidate_sample(candidates: list[dict], limit: int) -> list[dict]:
     """Round-robin across family+horizon buckets to avoid truncation bias."""
-    buckets: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    buckets: dict[tuple[str, int, str, str], list[dict]] = defaultdict(list)
     for c in candidates:
-        buckets[(str(c.get("family")), int(c.get("horizon", 0)))].append(c)
+        buckets[(
+            str(c.get("family")),
+            int(c.get("horizon", 0)),
+            str(c.get("feature_subset", "")),
+            str(c.get("regime_slice", "")),
+        )].append(c)
 
     out: list[dict] = []
     keys = sorted(buckets.keys())
