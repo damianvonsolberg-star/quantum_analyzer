@@ -200,14 +200,40 @@ def _try_recompute_replay(run_id: str) -> tuple[pd.DataFrame, pd.DataFrame, str 
         return pd.DataFrame(), pd.DataFrame(), f"replay_error:{e}"
 
 
-if equity.empty and actions.empty:
+latest_feature_ts = None
+try:
+    reg = pd.read_parquet(ROOT / "artifacts" / "explorer" / "registry.parquet")
+    rr = reg.loc[reg["experiment_id"] == chart_source_run]
+    if not rr.empty:
+        snapshot_id = str(rr.iloc[0].get("snapshot_id", ""))
+        if snapshot_id:
+            feats0 = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
+            latest_feature_ts = pd.to_datetime(feats0.index.max(), utc=True)
+except Exception:
+    latest_feature_ts = None
+
+last_action_ts = None
+if not actions.empty and "ts" in actions.columns:
+    try:
+        last_action_ts = pd.to_datetime(actions["ts"], utc=True, errors="coerce").dropna().max()
+    except Exception:
+        last_action_ts = None
+
+# Force replay when no emitted actions OR emitted actions are stale vs latest features.
+needs_replay = equity.empty or actions.empty
+if latest_feature_ts is not None and last_action_ts is not None:
+    lag_h = (latest_feature_ts - last_action_ts).total_seconds() / 3600.0
+    if lag_h > 2.0:
+        needs_replay = True
+        split_reason = "emitted_actions_stale_vs_latest_features"
+
+if needs_replay:
     eq2, ac2, err = _try_recompute_replay(chart_source_run)
     if not eq2.empty or not ac2.empty:
         equity, actions = _normalize_ts(eq2, "ts"), _normalize_ts(ac2, "ts")
-        st.info("Replay mode: showing recomputed timeline from fresh features + current logic (not emitted actions.csv).")
+        st.info("Replay mode: showing recomputed timeline from fresh features + current logic.")
     else:
-        # Last-resort visibility mode: show recent timeline as explicit HOLD/no-action bars
-        # so operators can still see that no actionable signals were generated.
+        # Last-resort visibility mode: explicit HOLD/no-action bars up to latest feature time.
         try:
             reg = pd.read_parquet(ROOT / "artifacts" / "explorer" / "registry.parquet")
             rr = reg.loc[reg["experiment_id"] == chart_source_run]
@@ -215,7 +241,6 @@ if equity.empty and actions.empty:
                 snapshot_id = str(rr.iloc[0].get("snapshot_id", ""))
                 if snapshot_id:
                     feats = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
-                    # keep substantial history visible when no actionable signals are emitted
                     c = feats[["close"]].copy().tail(24 * 14)
                     c = c.reset_index().rename(columns={"index": "ts"}) if "ts" not in c.columns else c
                     if "ts" not in c.columns:
@@ -230,7 +255,7 @@ if equity.empty and actions.empty:
                         "reason": ["no_action_generated_in_latest_run"] * len(c),
                     })
                     equity, actions = _normalize_ts(equity, "ts"), _normalize_ts(actions, "ts")
-                    st.warning("No actionable signals were generated in the latest run. Showing HOLD/no-action timeline for visibility.")
+                    st.warning("No actionable signals were generated in the latest run. Showing HOLD/no-action timeline up to latest feature timestamp.")
         except Exception:
             pass
         if equity.empty and actions.empty and err:
