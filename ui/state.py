@@ -63,6 +63,34 @@ def persist_artifact_dir(path: str) -> None:
         pass
 
 
+def _resolve_artifact_dir_path(raw_path: str) -> Path:
+    p = Path(str(raw_path).strip())
+    if not p.is_absolute():
+        p = (ROOT / p).resolve()
+    return p
+
+
+def _latest_from_leaderboard() -> str | None:
+    lb_path = ROOT / "artifacts" / "explorer" / "leaderboard.parquet"
+    if not lb_path.exists():
+        return None
+    try:
+        lb = pd.read_parquet(lb_path)
+        if lb.empty:
+            return None
+        if "leaderboard_rank" in lb.columns:
+            lb = lb.sort_values("leaderboard_rank", ascending=True)
+        if "artifact_dir" not in lb.columns:
+            return None
+        for raw in lb["artifact_dir"].dropna().astype(str).tolist():
+            p = _resolve_artifact_dir_path(raw)
+            if p.exists() and (p / "artifact_bundle.json").exists():
+                return str(p)
+    except Exception:
+        return None
+    return None
+
+
 def latest_operator_artifact_dir() -> str | None:
     # 1) explicit advise_now doctor path (if present and fresh)
     p = ROOT / "artifacts" / "explorer" / "advise_now_status.json"
@@ -86,7 +114,12 @@ def latest_operator_artifact_dir() -> str | None:
         except Exception:
             pass
 
-    # 2) fallback to newest experiment artifact dir from continuous cycle
+    # 2) preferred fallback: current leaderboard top artifact dir
+    lb = _latest_from_leaderboard()
+    if lb:
+        return lb
+
+    # 3) fallback to newest experiment artifact dir from continuous cycle
     exp_root = ROOT / "artifacts" / "explorer" / "experiments"
     if exp_root.exists():
         try:

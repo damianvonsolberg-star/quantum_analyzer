@@ -174,6 +174,17 @@ class ArtifactAdapter:
                 return str(row[n])
         return default
 
+    @staticmethod
+    def _normalize_live_action(action: str) -> str:
+        x = str(action or "").strip().upper()
+        if x in {"BUY", "LONG", "BUY SPOT"}:
+            return "BUY"
+        if x in {"REDUCE", "SELL", "SHORT", "REDUCE SPOT", "GO FLAT", "FLAT"}:
+            return "REDUCE"
+        if x == "WAIT":
+            return "WAIT"
+        return "HOLD"
+
     def to_forecast_view(self) -> UiForecastView:
         bundle_v2 = self._bundle_v2()
         if bundle_v2 is not None:
@@ -206,7 +217,7 @@ class ArtifactAdapter:
     def to_live_advice(self) -> UiLiveAdvice:
         final_adv = self._final_advisory_json()
         if isinstance(final_adv, dict) and final_adv.get("action"):
-            action = str(final_adv.get("action", "WAIT"))
+            action = self._normalize_live_action(str(final_adv.get("action", "WAIT")))
             conf_raw = final_adv.get("confidence", None)
             conf = float(conf_raw) if isinstance(conf_raw, (float, int)) else None
             edge_raw = final_adv.get("expected_edge_bps", final_adv.get("expectancy", None))
@@ -291,7 +302,7 @@ class ArtifactAdapter:
                     ts_ok = False
             if not ts_ok:
                 raise AdapterValidationError("schema v2 proposal timestamp is invalid")
-            headline_action = str(p["action"])
+            headline_action = self._normalize_live_action(str(p["action"]))
             target_position = float(p["target_position"])
             edge = float(p["expected_edge_bps"])
             cost = float(p["expected_cost_bps"])
@@ -340,7 +351,7 @@ class ArtifactAdapter:
         if not timestamp:
             raise AdapterValidationError("actions.csv missing required field: ts/timestamp")
 
-        headline_action = str(row["action"])
+        headline_action = self._normalize_live_action(str(row["action"]))
         target_position = float(row["target_position"])
         edge = float(row["expected_edge_bps"])
         cost = float(row["expected_cost_bps"])

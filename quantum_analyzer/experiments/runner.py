@@ -151,38 +151,45 @@ def run_experiments(
             summary_for_score["strict_robustness"] = True
             sb = score_result(summary_for_score, cr.diagnostics)
 
-            rows.append(
-                {
-                    "experiment_id": exp_id,
-                    "snapshot_id": snapshot_id,
-                    "trading_symbol": trading_symbol,
-                    "price_source_symbol": price_source_symbol,
-                    "timeframe": timeframe,
-                    "window_bars": spec.window_bars,
-                    "test_bars": spec.test_bars,
-                    "horizon": spec.horizon,
-                    "feature_subset": spec.feature_subset,
-                    "regime_slice": spec.regime_slice,
-                    "policy_params": spec.policy_params,
-                    "artifact_dir": str(exp_dir),
-                    "candidate_id": cr.candidate_id,
-                    "candidate_family": cr.family,
-                    "return_pct": cr.summary.get("return_pct", 0.0),
-                    "max_drawdown": float(cr.diagnostics.get("max_drawdown", 0.0)),
-                    "expectancy": (
-                        list((cr.diagnostics.get("expectancy_by_template") or {"none": 0.0}).values())[0]
-                        if (cr.diagnostics.get("expectancy_by_template") or {})
-                        else 0.0
-                    ),
-                    "calibration_proxy": float(cr.diagnostics.get("calibration_proxy", 0.0)),
-                    "turnover": float(cr.diagnostics.get("turnover", 0.0)),
-                    "score": sb["score"],
-                    "hard_gate_pass": sb["hard_gate_pass"],
-                    "score_breakdown": sb,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "status": "ok",
-                }
-            )
+            row = {
+                "experiment_id": exp_id,
+                "snapshot_id": snapshot_id,
+                "trading_symbol": trading_symbol,
+                "price_source_symbol": price_source_symbol,
+                "timeframe": timeframe,
+                "window_bars": spec.window_bars,
+                "test_bars": spec.test_bars,
+                "horizon": spec.horizon,
+                "feature_subset": spec.feature_subset,
+                "regime_slice": spec.regime_slice,
+                "policy_params": spec.policy_params,
+                "artifact_dir": str(exp_dir),
+                "candidate_id": cr.candidate_id,
+                "candidate_family": cr.family,
+                "return_pct": cr.summary.get("return_pct", 0.0),
+                "max_drawdown": float(cr.diagnostics.get("max_drawdown", 0.0)),
+                "expectancy": (
+                    list((cr.diagnostics.get("expectancy_by_template") or {"none": 0.0}).values())[0]
+                    if (cr.diagnostics.get("expectancy_by_template") or {})
+                    else 0.0
+                ),
+                "calibration_proxy": float(cr.diagnostics.get("calibration_proxy", 0.0)),
+                "turnover": float(cr.diagnostics.get("turnover", 0.0)),
+                "baseline_wait_return_pct": float(cr.summary.get("baseline_wait_return_pct", 0.0) or 0.0),
+                "baseline_always_long_return_pct": float(cr.summary.get("baseline_always_long_return_pct", 0.0) or 0.0),
+                "baseline_btc_follow_return_pct": float(cr.summary.get("baseline_btc_follow_return_pct", 0.0) or 0.0),
+                "baseline_random_action_return_pct": float(cr.summary.get("baseline_random_action_return_pct", 0.0) or 0.0),
+                "baseline_momentum_simple_return_pct": float(cr.summary.get("baseline_momentum_simple_return_pct", 0.0) or 0.0),
+                "baseline_mean_reversion_simple_return_pct": float(cr.summary.get("baseline_mean_reversion_simple_return_pct", 0.0) or 0.0),
+                "score": sb["score"],
+                "hard_gate_pass": sb["hard_gate_pass"],
+                "score_breakdown": sb,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "status": "ok",
+            }
+            # Flatten score metrics so release gates can read benchmark/robustness fields directly.
+            row.update(sb)
+            rows.append(row)
         except Exception as e:  # noqa: BLE001
             failures.append(
                 {

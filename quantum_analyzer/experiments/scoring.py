@@ -16,10 +16,31 @@ def score_result(summary: dict[str, Any], diagnostics: dict[str, Any]) -> dict[s
     turnover = float(diagnostics.get("turnover", 0.0) or 0.0)
 
     aq_raw = diagnostics.get("action_quality")
-    aq = (aq_raw or {}).get("BUY", {}) or {}
-    action_quality_available = isinstance(aq_raw, dict) and bool(aq_raw)
-    action_quality = float(aq.get("hit_rate", 0.5 if not action_quality_available else 0.0) or 0.0)
-    exp = float(aq.get("avg_pnl", diagnostics.get("expectancy", 0.0)) or 0.0)
+    actionable_support = 0.0
+    weighted_hit = 0.0
+    weighted_exp = 0.0
+    if isinstance(aq_raw, dict):
+        for k in ["BUY", "REDUCE"]:
+            row = (aq_raw.get(k) or {})
+            cnt = float(row.get("count", 0.0) or 0.0)
+            if cnt <= 0.0:
+                continue
+            actionable_support += cnt
+            weighted_hit += cnt * float(row.get("hit_rate", 0.5) or 0.5)
+            weighted_exp += cnt * float(row.get("avg_pnl", 0.0) or 0.0)
+
+    action_quality_available = actionable_support > 0.0
+    if action_quality_available:
+        action_quality = float(weighted_hit / max(actionable_support, 1e-9))
+        exp = float(weighted_exp / max(actionable_support, 1e-9))
+    else:
+        exp_tpl = diagnostics.get("expectancy_by_template")
+        if isinstance(exp_tpl, dict) and exp_tpl:
+            exp = float(sum(float(v or 0.0) for v in exp_tpl.values()) / max(len(exp_tpl), 1))
+        else:
+            exp = float(diagnostics.get("expectancy", 0.0) or 0.0)
+        action_quality = 0.5
+
     sample_support_available = "test_bars" in summary and summary.get("test_bars") is not None
     sample_support = float(summary.get("test_bars", 0.0) or 0.0)
 
@@ -55,26 +76,69 @@ def score_result(summary: dict[str, Any], diagnostics: dict[str, Any]) -> dict[s
     s_turn = _clip01(1.0 - min(turnover, 2.0) / 2.0)
     unavailable_metrics: list[str] = []
 
-    def _metric(name: str, neutral: float = 0.5) -> float:
-        if name not in diagnostics or diagnostics.get(name) is None:
-            unavailable_metrics.append(name)
-            return float(neutral)
-        return float(diagnostics.get(name) or neutral)
+    def _bucket_quality(x: Any) -> float | None:
+        if not isinstance(x, dict) or not x:
+            return None
+        vals = [float(v) for v in x.values() if isinstance(v, (int, float))]
+        if not vals:
+            return None
+        worst = min(vals)
+        mean = sum(vals) / max(len(vals), 1)
+
+        def _to_q(v: float) -> float:
+            # piecewise clamp around 0 pnl-like values
+            if v >= 0:
+                return min(1.0, 0.5 + min(v, 0.02) / 0.04)
+            return max(0.0, 0.5 + max(v, -0.02) / 0.04)
+
+        return float((_to_q(worst) + _to_q(mean)) / 2.0)
+
+    vol_quality = _bucket_quality(diagnostics.get("performance_by_vol_bucket"))
+    btc_quality = _bucket_quality(diagnostics.get("performance_by_btc_regime"))
+
+    def _metric(
+        name: str,
+        neutral: float = 0.5,
+        fallback_keys: list[str] | None = None,
+        fallback_values: list[float | None] | None = None,
+    ) -> float:
+        if name in diagnostics and diagnostics.get(name) is not None:
+            return float(diagnostics.get(name) or neutral)
+        if fallback_keys:
+            for fk in fallback_keys:
+                if fk in diagnostics and diagnostics.get(fk) is not None:
+                    return float(diagnostics.get(fk) or neutral)
+        if fallback_values:
+            for fv in fallback_values:
+                if fv is not None:
+                    return float(fv)
+        unavailable_metrics.append(name)
+        return float(neutral)
 
     s_drift = _clip01(1.0 - _metric("drift_stability", 0.5))
     s_cons = _clip01(_metric("action_consistency", 0.5))
-    s_cross = _clip01(_metric("cross_window_robustness", 0.5))
-    s_reg = _clip01(_metric("regime_robustness", 0.5))
-    s_btc = _clip01(_metric("btc_context_quality", 0.5))
-    s_vol = _clip01(_metric("volatility_regime_performance", 0.5))
-    s_conf = _clip01(_metric("confidence_reliability", cal))
-    s_ent = _clip01(1.0 - _metric("entropy_quality", 0.5))
+    s_cross = _clip01(_metric("cross_window_robustness", 0.5, fallback_keys=["action_consistency"]))
+    s_reg = _clip01(_metric("regime_robustness", 0.5, fallback_keys=["volatility_regime_performance"], fallback_values=[vol_quality]))
+    s_btc = _clip01(_metric("btc_context_quality", 0.5, fallback_values=[btc_quality]))
+    s_vol = _clip01(_metric("volatility_regime_performance", 0.5, fallback_values=[vol_quality]))
+    s_conf = _clip01(_metric("confidence_reliability", cal, fallback_keys=["calibration_proxy"]))
+
+    ent_raw = diagnostics.get("entropy_quality")
+    if ent_raw is None and summary.get("hold_ratio") is not None:
+        ent_raw = float(summary.get("hold_ratio") or 0.5)
+    if ent_raw is None:
+        unavailable_metrics.append("entropy_quality")
+        ent_raw = 0.5
+    s_ent = _clip01(1.0 - float(ent_raw))
 
     critical_required = {"cross_window_robustness", "regime_robustness", "confidence_reliability", "entropy_quality"}
     missing_critical = sorted(set(unavailable_metrics).intersection(critical_required))
     strict_mode = bool(summary.get("strict_robustness", False))
     if strict_mode and missing_critical:
         hard_gate_failures.append("missing_critical_robustness_metrics")
+
+    start_stability = float(diagnostics.get("start_date_stability", 0.5) if diagnostics.get("start_date_stability") is not None else 0.5)
+    neighbor_stability = float(diagnostics.get("neighbor_stability", 0.5) if diagnostics.get("neighbor_stability") is not None else 0.5)
 
     metrics = {
         "s_return": s_ret,
@@ -91,8 +155,8 @@ def score_result(summary: dict[str, Any], diagnostics: dict[str, Any]) -> dict[s
         "s_vol_regime": s_vol,
         "s_confidence_reliability": s_conf,
         "s_entropy_quality": s_ent,
-        "start_date_stability": float(diagnostics.get("start_date_stability", 0.0) or 0.0),
-        "neighbor_stability": float(diagnostics.get("neighbor_stability", 0.0) or 0.0),
+        "start_date_stability": start_stability,
+        "neighbor_stability": neighbor_stability,
         "regime_concentration": float(diagnostics.get("regime_concentration", 0.0) or 0.0),
         "complexity": float(diagnostics.get("complexity", 0.0) or 0.0),
         "benchmark_lift": benchmark_lift,

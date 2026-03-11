@@ -264,13 +264,31 @@ if needs_replay:
 # filters
 f1, f2, f3, f4 = st.columns(4)
 min_d = max_d = None
+
+all_ts = []
 if not equity.empty and "ts" in equity.columns:
-    ts = pd.to_datetime(equity["ts"], errors="coerce", utc=True).dropna()
+    ts_eq = pd.to_datetime(equity["ts"], errors="coerce", utc=True).dropna()
+    if not ts_eq.empty:
+        all_ts.append(ts_eq)
+if not actions.empty:
+    ts_col_actions = "ts" if "ts" in actions.columns else ("timestamp" if "timestamp" in actions.columns else None)
+    if ts_col_actions:
+        ts_ac = pd.to_datetime(actions[ts_col_actions], errors="coerce", utc=True).dropna()
+        if not ts_ac.empty:
+            all_ts.append(ts_ac)
+if all_ts:
+    ts = pd.concat(all_ts, ignore_index=True).dropna()
     if not ts.empty:
         min_d, max_d = ts.min().date(), ts.max().date()
 
 with f1:
-    date_range = st.date_input("Date range", value=(min_d, max_d) if min_d and max_d else ())
+    default_end = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=1)).date()
+    if min_d is not None:
+        if default_end < min_d:
+            default_end = min_d
+        date_range = st.date_input("Date range", value=(min_d, default_end))
+    else:
+        date_range = st.date_input("Date range", value=())
 with f2:
     action_opts = ["ALL"] + (sorted(actions["action"].dropna().astype(str).unique().tolist()) if "action" in actions.columns else [])
     action_filter = st.selectbox("Action type", action_opts)

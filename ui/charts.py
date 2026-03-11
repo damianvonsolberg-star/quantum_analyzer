@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 import altair as alt
@@ -57,8 +58,8 @@ def infer_kpis(summary: dict[str, Any], actions: pd.DataFrame, equity: pd.DataFr
 
 def filter_actions(
     actions: pd.DataFrame,
-    start: pd.Timestamp | None = None,
-    end: pd.Timestamp | None = None,
+    start: pd.Timestamp | date | datetime | None = None,
+    end: pd.Timestamp | date | datetime | None = None,
     action_type: str = "ALL",
     horizon: str = "ALL",
     template: str = "ALL",
@@ -70,9 +71,17 @@ def filter_actions(
     if ts_col:
         out["_ts"] = pd.to_datetime(out[ts_col], errors="coerce", utc=True)
         if start is not None:
-            out = out[out["_ts"] >= pd.Timestamp(start, tz="UTC")]
+            s = pd.Timestamp(start)
+            s = s.tz_localize("UTC") if s.tzinfo is None else s.tz_convert("UTC")
+            out = out[out["_ts"] >= s]
         if end is not None:
-            out = out[out["_ts"] <= pd.Timestamp(end, tz="UTC")]
+            e = pd.Timestamp(end)
+            e = e.tz_localize("UTC") if e.tzinfo is None else e.tz_convert("UTC")
+            # For date pickers, include the full selected day.
+            if isinstance(end, date) and not isinstance(end, datetime):
+                out = out[out["_ts"] < (e + pd.Timedelta(days=1))]
+            else:
+                out = out[out["_ts"] <= e]
     if action_type != "ALL" and "action" in out.columns:
         out = out[out["action"] == action_type]
     if horizon != "ALL" and "horizon" in out.columns:

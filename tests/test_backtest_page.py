@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 
 from ui.charts import compute_drawdown, filter_actions, infer_kpis
@@ -36,3 +38,20 @@ def test_filter_actions_simple():
     out = filter_actions(df, action_type="BUY", horizon="h12", template="T1")
     assert len(out) == 1
     assert out.iloc[0]["action"] == "BUY"
+
+
+def test_filter_actions_date_end_includes_full_day():
+    df = pd.DataFrame(
+        {
+            "ts": [
+                "2026-01-02T00:00:00Z",
+                "2026-01-02T12:00:00Z",
+                "2026-01-02T23:59:59Z",
+                "2026-01-03T00:00:00Z",
+            ],
+            "action": ["HOLD", "BUY", "REDUCE", "HOLD"],
+        }
+    )
+    out = filter_actions(df, start=date(2026, 1, 2), end=date(2026, 1, 2))
+    assert len(out) == 3
+    assert set(out["action"]) == {"HOLD", "BUY", "REDUCE"}

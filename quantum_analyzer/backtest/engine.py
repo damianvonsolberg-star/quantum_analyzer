@@ -10,6 +10,17 @@ import numpy as np
 import pandas as pd
 
 
+def _normalize_spot_action(action: str) -> str:
+    x = str(action or "").strip().upper()
+    if x in {"BUY", "LONG", "BUY SPOT"}:
+        return "BUY"
+    if x in {"REDUCE", "SELL", "SHORT", "REDUCE SPOT", "GO FLAT", "FLAT"}:
+        return "REDUCE"
+    if x == "WAIT":
+        return "WAIT"
+    return "HOLD"
+
+
 def _measured_action_stats(history_actions: list[dict[str, Any]], action_label: str) -> tuple[float, float, float, float]:
     rows = [r for r in history_actions if str(r.get("action", "")).upper() == action_label]
     if len(rows) < 10:
@@ -50,6 +61,121 @@ def _distribution_from_returns(h: int, returns: np.ndarray) -> dict[str, Any]:
             "p_break_down": float(np.mean(returns <= q05)),
         },
         "probability_up": p_up,
+    }
+
+
+def _compound_return_from_targets(
+    ret_next: np.ndarray,
+    targets: np.ndarray,
+    *,
+    turnover_cap: float,
+    round_trip_cost_bps: float,
+) -> float:
+    if ret_next.size == 0 or targets.size == 0:
+        return 0.0
+    n = int(min(ret_next.size, targets.size))
+    if n <= 0:
+        return 0.0
+
+    one_way_cost = (round_trip_cost_bps / 2.0) / 10_000.0
+    eq = 1.0
+    pos = 0.0
+    for i in range(n):
+        desired = float(np.clip(targets[i], 0.0, 1.0))
+        delta = float(np.clip(desired - pos, -turnover_cap, turnover_cap))
+        new_pos = pos + delta
+        eq *= float(1.0 + new_pos * float(ret_next[i]) - abs(delta) * one_way_cost)
+        if eq <= 0.0:
+            return -1.0
+        pos = new_pos
+    return float(eq - 1.0)
+
+
+def _baseline_returns(
+    *,
+    all_test_indices: list[int],
+    close: pd.Series,
+    features: pd.DataFrame,
+    turnover_cap: float,
+    round_trip_cost_bps: float,
+) -> dict[str, float]:
+    defaults = {
+        "baseline_wait_return_pct": 0.0,
+        "baseline_always_long_return_pct": 0.0,
+        "baseline_btc_follow_return_pct": 0.0,
+        "baseline_random_action_return_pct": 0.0,
+        "baseline_momentum_simple_return_pct": 0.0,
+        "baseline_mean_reversion_simple_return_pct": 0.0,
+    }
+    if not all_test_indices:
+        return defaults
+
+    valid = [i for i in all_test_indices if (i + 1) < len(close)]
+    if not valid:
+        return defaults
+
+    close_arr = close.astype(float)
+    ret_next = np.array([float(close_arr.iloc[i + 1] / close_arr.iloc[i] - 1.0) for i in valid], dtype=float)
+    prev_ret = np.array(
+        [
+            float(close_arr.iloc[i] / close_arr.iloc[i - 1] - 1.0) if i > 0 else 0.0
+            for i in valid
+        ],
+        dtype=float,
+    )
+    btc_sig = np.array(
+        [
+            float(features.iloc[i].get("btc_return_1h", 0.0)) if i < len(features) else 0.0
+            for i in valid
+        ],
+        dtype=float,
+    )
+
+    rng = np.random.default_rng(7)
+    targets_wait = np.zeros_like(ret_next, dtype=float)
+    targets_always_long = np.ones_like(ret_next, dtype=float)
+    targets_btc_follow = (btc_sig > 0.0).astype(float)
+    targets_random = rng.choice(np.array([0.0, 0.5, 1.0], dtype=float), size=ret_next.size, p=[0.40, 0.20, 0.40])
+    targets_momentum = (prev_ret > 0.0).astype(float)
+    targets_mean_reversion = (prev_ret < 0.0).astype(float)
+
+    return {
+        "baseline_wait_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_wait,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
+        "baseline_always_long_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_always_long,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
+        "baseline_btc_follow_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_btc_follow,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
+        "baseline_random_action_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_random,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
+        "baseline_momentum_simple_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_momentum,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
+        "baseline_mean_reversion_simple_return_pct": _compound_return_from_targets(
+            ret_next,
+            targets_mean_reversion,
+            turnover_cap=turnover_cap,
+            round_trip_cost_bps=round_trip_cost_bps,
+        ),
     }
 
 from quantum_analyzer.backtest.diagnostics import (
@@ -170,16 +296,21 @@ def run_backtest(
                         drawdown_state=DrawdownState(drawdown_pct=0.0),
                         regime_caps=RegimeCaps(),
                         turnover_cap=bt_cfg.turnover_cap,
+                        )
                     )
-                )
-                target = float(ap.target_position)
-                action_label = str(ap.action)
+                raw_action = str(ap.action)
+                action_label = _normalize_spot_action(raw_action)
+                # Backtest outputs should reflect spot-actionable semantics.
+                target = float(max(0.0, float(ap.target_position)))
                 edge_bps = float(ap.expected_edge_bps)
                 reason = str(ap.reason)
+                if raw_action.upper() != action_label:
+                    reason = f"{reason} (raw_action={raw_action})"
                 p_up = float(forecast.distributions.get("h36").quantiles.get("p_up", np.nan)) if "h36" in forecast.distributions else np.nan
             else:
                 ts = features.index[i]
-                action_label = str(action_series.loc[ts]) if action_series is not None and ts in action_series.index else "HOLD"
+                raw_action = str(action_series.loc[ts]) if action_series is not None and ts in action_series.index else "HOLD"
+                action_label = _normalize_spot_action(raw_action)
                 if action_label == "BUY":
                     target = 1.0
                 elif action_label == "REDUCE":
@@ -246,10 +377,22 @@ def run_backtest(
     eq_df = pd.DataFrame(eq_rows).set_index("ts") if eq_rows else pd.DataFrame(columns=["equity", "pnl", "position"])
     act_df = pd.DataFrame(act_rows).set_index("ts") if act_rows else pd.DataFrame(columns=["action"])
 
+    action_upper = act_df["action"].astype(str).str.upper() if not act_df.empty else pd.Series(dtype=str)
+    hold_ratio = float(action_upper.isin({"HOLD", "WAIT"}).mean()) if not action_upper.empty else 1.0
+    hold_lock_reasons: list[str] = []
+    if len(splits) == 0:
+        hold_lock_reasons.append("no_walkforward_splits")
+    if act_df.empty:
+        hold_lock_reasons.append("no_actions_emitted")
+    if hold_ratio > 0.95:
+        hold_lock_reasons.append("high_hold_wait_ratio")
+    if not action_upper.empty and int(action_upper.nunique()) <= 1:
+        hold_lock_reasons.append("single_action_regime")
+
     cal = calibration_proxy(act_df.get("p_up", pd.Series(dtype=float)), act_df.get("realized_up", pd.Series(dtype=float))) if not act_df.empty else 0.0
     hr = hit_rate_by_state(act_df.get("state", pd.Series(dtype=object)), act_df.get("pnl", pd.Series(dtype=float))) if not act_df.empty else {}
     exp_tpl = expectancy_by_template(act_df.get("template_id", pd.Series(dtype=object)), act_df.get("pnl", pd.Series(dtype=float))) if not act_df.empty else {}
-    action_rate = float((act_df["action"] != "HOLD").mean()) if not act_df.empty else 0.0
+    action_rate = float((~action_upper.isin({"HOLD", "WAIT"})).mean()) if not action_upper.empty else 0.0
     turnover = float(act_df.get("turnover_abs", pd.Series(dtype=float)).sum()) if not act_df.empty else 0.0
     mdd = max_drawdown(eq_df["equity"]) if not eq_df.empty else 0.0
 
@@ -277,6 +420,14 @@ def run_backtest(
         turnover_cost_sensitivity=sens,
     )
 
+    baselines = _baseline_returns(
+        all_test_indices=all_test_indices,
+        close=close,
+        features=features,
+        turnover_cap=bt_cfg.turnover_cap,
+        round_trip_cost_bps=bt_cfg.round_trip_cost_bps,
+    )
+
     summary = {
         "bars": len(features),
         "split_count": len(splits),
@@ -284,6 +435,7 @@ def run_backtest(
         "hold_ratio": hold_ratio,
         "hold_lock_detected": bool(hold_ratio > 0.95),
         "hold_lock_reasons": hold_lock_reasons,
+        **baselines,
         "ending_equity": float(eq_df["equity"].iloc[-1]) if not eq_df.empty else bt_cfg.initial_equity,
         "return_pct": float(eq_df["equity"].iloc[-1] / bt_cfg.initial_equity - 1.0) if not eq_df.empty else 0.0,
         "diagnostics": diag.to_dict(),

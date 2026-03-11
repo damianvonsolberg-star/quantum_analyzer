@@ -153,6 +153,9 @@ def promote_from_leaderboard(
                 "context_match": context_match,
                 "expectancy": expectancy,
                 "target_position": float(tp),
+                "trading_symbol": (str(g["trading_symbol"].iloc[0]) if "trading_symbol" in g.columns and pd.notna(g["trading_symbol"].iloc[0]) else None),
+                "timeframe": (str(g["timeframe"].iloc[0]) if "timeframe" in g.columns and pd.notna(g["timeframe"].iloc[0]) else None),
+                "price_source_symbol": (str(g["price_source_symbol"].iloc[0]) if "price_source_symbol" in g.columns and pd.notna(g["price_source_symbol"].iloc[0]) else None),
             }
         )
         rows.append(d)
@@ -181,6 +184,9 @@ def promote_from_leaderboard(
             "agreement": float(r.get("agreement", 0.0) or 0.0),
             "context_match": float(r.get("context_match", 0.5) or 0.5),
             "reason": "cluster_consensus",
+            "trading_symbol": (str(r.get("trading_symbol")) if r.get("trading_symbol") else None),
+            "timeframe": (str(r.get("timeframe")) if r.get("timeframe") else None),
+            "price_source_symbol": (str(r.get("price_source_symbol")) if r.get("price_source_symbol") else None),
         }
         row["invalidation_notes"] = build_invalidation_notes(row)
         row.setdefault("oos_usefulness", 0.6)
@@ -244,6 +250,9 @@ def promote_from_leaderboard(
             "governance_status": governance_status,
             "family_scores": fam_scores,
             "discovered_material_improvement": discovered_material,
+            "trading_symbol": (str(top.get("trading_symbol")) if top.get("trading_symbol") else None),
+            "timeframe": (str(top.get("timeframe")) if top.get("timeframe") else None),
+            "price_source_symbol": (str(top.get("price_source_symbol")) if top.get("price_source_symbol") else None),
         },
     ).to_dict()
 

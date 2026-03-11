@@ -7,6 +7,17 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
+def _normalize_spot_action(action_raw: str) -> str:
+    x = str(action_raw or "").strip().upper()
+    if x in {"BUY", "LONG", "BUY SPOT"}:
+        return "BUY"
+    if x in {"REDUCE", "SELL", "SHORT", "REDUCE SPOT", "GO FLAT", "FLAT"}:
+        return "REDUCE"
+    if x == "HOLD":
+        return "HOLD"
+    return "WAIT"
+
+
 def _is_cycle_stale() -> tuple[bool, str]:
     p = Path("artifacts/research_cycle_status.json")
     if not p.exists():
@@ -69,7 +80,9 @@ def main() -> int:
         cost_bps = supporting.get("expected_cost_bps", None)
 
         action_raw = str(b.get("action", "WAIT"))
-        action_spot = action_raw if action_raw in {"BUY", "HOLD", "REDUCE", "WAIT"} else "WAIT"
+        action_spot = _normalize_spot_action(action_raw)
+        target_raw = (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None)
+        target_spot = (max(0.0, target_raw) if target_raw is not None else None)
 
         out = {
             "status": b.get("status", "approved"),
@@ -78,9 +91,9 @@ def main() -> int:
             "action_raw": action_raw,
             "action_spot": action_spot,
             "action": action_spot,
-            "target_position_raw": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
-            "target_position_spot": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
-            "target_position": (float(b.get("target_position")) if isinstance(b.get("target_position"), (float, int)) else None),
+            "target_position_raw": target_raw,
+            "target_position_spot": target_spot,
+            "target_position": target_spot,
             "confidence": (float(b.get("confidence")) if isinstance(b.get("confidence"), (float, int)) else None),
             "entropy": supporting.get("entropy", None),
             "expected_edge_bps": edge_bps,
@@ -115,12 +128,6 @@ def main() -> int:
     if rg is None:
         out.update({
             "status": "insufficient_evidence",
-            "action_raw": "WAIT",
-            "action_spot": "WAIT",
-            "action": "WAIT",
-            "target_position_raw": None,
-            "target_position_spot": None,
-            "target_position": None,
             "reason": "missing_release_gate_report",
             "release_state": "NO_EDGE",
             "release_gate": {
@@ -148,11 +155,6 @@ def main() -> int:
     if missing_semantics:
         out.update({
             "status": "insufficient_evidence",
-            "action": "WAIT",
-            "action_spot": "WAIT",
-            "target_position_raw": None,
-            "target_position_spot": None,
-            "target_position": None,
             "reason": "missing_required_semantics",
             "release_state": "NO_EDGE",
         })
@@ -174,11 +176,6 @@ def main() -> int:
         if not bool(rg.get("passed", False)):
             out.update({
                 "status": "no_edge",
-                "action": "WAIT",
-                "action_spot": "WAIT",
-                "target_position_raw": None,
-                "target_position_spot": None,
-                "target_position": None,
                 "confidence": (min(float(out.get("confidence")), 0.2) if isinstance(out.get("confidence"), (float, int)) else None),
                 "reason": "release_gates_failed",
                 "release_state": rg.get("overall_state", "NO_EDGE"),
@@ -195,11 +192,6 @@ def main() -> int:
     if stale:
         out.update({
             "status": "stale_cycle",
-            "action": "WAIT" if out.get("action") not in {"HOLD", "WAIT"} else out.get("action"),
-            "action_spot": "WAIT" if out.get("action_spot") not in {"HOLD", "WAIT"} else out.get("action_spot"),
-            "target_position_raw": None,
-            "target_position_spot": None,
-            "target_position": None,
             "confidence": (min(float(out.get("confidence")), 0.2) if isinstance(out.get("confidence"), (float, int)) else None),
             "reason": stale_reason,
         })

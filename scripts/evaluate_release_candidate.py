@@ -51,6 +51,12 @@ def _measured_baseline_returns(cand: dict, registry: pd.DataFrame) -> dict[str, 
             out["ALWAYS_LONG"] = {"return": float(cand.get("baseline_always_long_return_pct") or 0.0), "source_type": "measured_run"}
         if "baseline_btc_follow_return_pct" in cand:
             out["BTC_FOLLOW"] = {"return": float(cand.get("baseline_btc_follow_return_pct") or 0.0), "source_type": "measured_run"}
+        if "baseline_random_action_return_pct" in cand:
+            out["RANDOM_ACTION"] = {"return": float(cand.get("baseline_random_action_return_pct") or 0.0), "source_type": "measured_run"}
+        if "baseline_momentum_simple_return_pct" in cand:
+            out["MOMENTUM_SIMPLE"] = {"return": float(cand.get("baseline_momentum_simple_return_pct") or 0.0), "source_type": "measured_run"}
+        if "baseline_mean_reversion_simple_return_pct" in cand:
+            out["MEAN_REVERSION_SIMPLE"] = {"return": float(cand.get("baseline_mean_reversion_simple_return_pct") or 0.0), "source_type": "measured_run"}
 
     if registry.empty:
         return out
