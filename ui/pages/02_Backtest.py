@@ -30,6 +30,7 @@ from ui.charts import (
     signal_price_overlay_chart,
 )
 from ui.components import artifact_banner, render_soft_card, sidebar_controls
+from ui.backtest_view import apply_promoted_advisory_overlay
 from ui.state import init_state, persist_artifact_dir, latest_operator_artifact_dir
 
 
@@ -72,13 +73,16 @@ else:
 
 adv_ts = "n/a"
 adv_src = "n/a"
+adv_json: dict[str, object] | None = None
 adv_p = ROOT / "artifacts" / "promoted" / "advisory_latest.json"
 if adv_p.exists():
     try:
         aj = json.loads(adv_p.read_text(encoding="utf-8"))
-        adv_ts = str(aj.get("updated_at") or aj.get("timestamp") or "n/a")
-        if isinstance(aj.get("source_ids"), dict):
-            adv_src = str(aj["source_ids"].get("leaderboard") or "n/a")
+        if isinstance(aj, dict):
+            adv_json = aj
+            adv_ts = str(aj.get("updated_at") or aj.get("timestamp") or "n/a")
+            if isinstance(aj.get("source_ids"), dict):
+                adv_src = str(aj["source_ids"].get("leaderboard") or "n/a")
     except Exception:
         pass
 st.caption(f"Advisory source timestamp: {adv_ts} · Chart source run: {chart_source_run}")
@@ -260,6 +264,13 @@ if needs_replay:
             pass
         if equity.empty and actions.empty and err:
             st.warning(f"Replay mode unavailable: {err}")
+
+actions, overlay_applied, overlay_mode = apply_promoted_advisory_overlay(actions, adv_json)
+if overlay_applied:
+    if overlay_mode == "replaced_same_hour":
+        st.info("Decision engine overlay: latest same-hour action is aligned to promoted advisory.")
+    elif overlay_mode == "appended_latest":
+        st.info("Decision engine overlay: appended promoted advisory action to latest timeline.")
 
 # filters
 f1, f2, f3, f4 = st.columns(4)
