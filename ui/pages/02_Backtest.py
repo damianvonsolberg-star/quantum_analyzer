@@ -30,7 +30,7 @@ from ui.charts import (
     signal_price_overlay_chart,
 )
 from ui.components import artifact_banner, render_soft_card, sidebar_controls
-from ui.backtest_view import apply_promoted_advisory_overlay
+from ui.backtest_view import apply_promoted_advisory_overlay, normalize_synthetic_ts
 from ui.state import init_state, persist_artifact_dir, latest_operator_artifact_dir
 
 
@@ -97,28 +97,8 @@ if not actions.empty and "ts" in actions.columns:
     except Exception:
         pass
 
-
-def _normalize_ts(df: pd.DataFrame, ts_col: str = "ts") -> pd.DataFrame:
-    if df is None or df.empty or ts_col not in df.columns:
-        return df
-    out = df.copy()
-    s = out[ts_col]
-    # If ts is numeric bar-index style (small integers), create synthetic hourly timeline ending at artifact time.
-    if pd.api.types.is_numeric_dtype(s):
-        s_num = pd.to_numeric(s, errors="coerce")
-        if s_num.notna().any() and float(s_num.max()) < 10_000_000_000:  # not epoch ms/us/ns
-            try:
-                end_ts = pd.to_datetime(artifact_ts, utc=True, errors="coerce") if artifact_ts else pd.Timestamp.utcnow().tz_localize("UTC")
-            except Exception:
-                end_ts = pd.Timestamp.utcnow().tz_localize("UTC")
-            n = len(out)
-            out[ts_col] = pd.date_range(end=end_ts, periods=n, freq="h", tz="UTC")
-            return out
-    return out
-
-
-equity = _normalize_ts(equity, "ts")
-actions = _normalize_ts(actions, "ts")
+equity = normalize_synthetic_ts(equity, ts_col="ts", artifact_ts=artifact_ts)
+actions = normalize_synthetic_ts(actions, ts_col="ts", artifact_ts=artifact_ts)
 
 
 def _try_recompute_replay(run_id: str) -> tuple[pd.DataFrame, pd.DataFrame, str | None]:
@@ -234,36 +214,15 @@ if latest_feature_ts is not None and last_action_ts is not None:
 if needs_replay:
     eq2, ac2, err = _try_recompute_replay(chart_source_run)
     if not eq2.empty or not ac2.empty:
-        equity, actions = _normalize_ts(eq2, "ts"), _normalize_ts(ac2, "ts")
+        equity = normalize_synthetic_ts(eq2, ts_col="ts", artifact_ts=artifact_ts)
+        actions = normalize_synthetic_ts(ac2, ts_col="ts", artifact_ts=artifact_ts)
         st.info("Replay mode: showing recomputed timeline from fresh features + current logic.")
     else:
-        # Last-resort visibility mode: explicit HOLD/no-action bars up to latest feature time.
-        try:
-            reg = pd.read_parquet(ROOT / "artifacts" / "explorer" / "registry.parquet")
-            rr = reg.loc[reg["experiment_id"] == chart_source_run]
-            if not rr.empty:
-                snapshot_id = str(rr.iloc[0].get("snapshot_id", ""))
-                if snapshot_id:
-                    feats = load_feature_snapshot(ROOT / "artifacts" / "features", snapshot_id)
-                    c = feats[["close"]].copy().tail(24 * 14)
-                    c = c.reset_index().rename(columns={"index": "ts"}) if "ts" not in c.columns else c
-                    if "ts" not in c.columns:
-                        c["ts"] = feats.index[-len(c):]
-                    equity = pd.DataFrame({"ts": c["ts"], "equity": [1_000_000.0] * len(c)})
-                    actions = pd.DataFrame({
-                        "ts": c["ts"],
-                        "action": ["HOLD"] * len(c),
-                        "target_position": [0.0] * len(c),
-                        "expected_edge_bps": [0.0] * len(c),
-                        "expected_cost_bps": [0.0] * len(c),
-                        "reason": ["no_action_generated_in_latest_run"] * len(c),
-                    })
-                    equity, actions = _normalize_ts(equity, "ts"), _normalize_ts(actions, "ts")
-                    st.warning("No actionable signals were generated in the latest run. Showing HOLD/no-action timeline up to latest feature timestamp.")
-        except Exception:
-            pass
-        if equity.empty and actions.empty and err:
-            st.warning(f"Replay mode unavailable: {err}")
+        if equity.empty and actions.empty:
+            if err:
+                st.warning(f"No chartable actions/equity for latest run, and replay failed: {err}")
+            else:
+                st.warning("No chartable actions/equity for latest run, and replay data is unavailable.")
 
 actions, overlay_applied, overlay_mode = apply_promoted_advisory_overlay(actions, adv_json)
 if overlay_applied:
@@ -337,6 +296,20 @@ with k7:
     render_soft_card("Calibration", f"{k['calibration_proxy']:.4f}" if k["calibration_proxy"] is not None else "n/a")
 
 # charts
+st.subheader("Signal Overlay on SOLUSDC Price")
+price_df = pd.DataFrame()
+if not actions_f.empty and ("ts" in actions_f.columns or "timestamp" in actions_f.columns):
+    ts_col = "ts" if "ts" in actions_f.columns else "timestamp"
+    ts_vals = pd.to_datetime(actions_f[ts_col], errors="coerce", utc=True).dropna()
+    if not ts_vals.empty:
+        price_df = fetch_solusdc_price_series(ts_vals.min().isoformat(), ts_vals.max().isoformat(), interval="1h")
+
+ov = signal_price_overlay_chart(price_df, actions_f)
+if ov is not None:
+    st.altair_chart(ov, use_container_width=True)
+else:
+    st.info("Price overlay unavailable (missing actions/timestamps or Binance fetch unavailable)")
+
 st.subheader("Equity Curve")
 eq_chart = equity_chart(equity)
 if eq_chart is not None:
@@ -358,20 +331,6 @@ if ah is not None:
     st.altair_chart(ah, use_container_width=True)
 else:
     st.info("No action data available")
-
-st.subheader("Signal Overlay on SOLUSDC Price")
-price_df = pd.DataFrame()
-if not actions_f.empty and ("ts" in actions_f.columns or "timestamp" in actions_f.columns):
-    ts_col = "ts" if "ts" in actions_f.columns else "timestamp"
-    ts_vals = pd.to_datetime(actions_f[ts_col], errors="coerce", utc=True).dropna()
-    if not ts_vals.empty:
-        price_df = fetch_solusdc_price_series(ts_vals.min().isoformat(), ts_vals.max().isoformat(), interval="1h")
-
-ov = signal_price_overlay_chart(price_df, actions_f)
-if ov is not None:
-    st.altair_chart(ov, use_container_width=True)
-else:
-    st.info("Price overlay unavailable (missing actions/timestamps or Binance fetch unavailable)")
 
 st.subheader("Recent Actions")
 if not actions_f.empty:

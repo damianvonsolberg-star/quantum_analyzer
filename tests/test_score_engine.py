@@ -33,3 +33,12 @@ def test_score_engine_strict_mode_with_proxy_metrics():
     )
     assert s["hard_gate_pass"] is True
     assert 0 < s["score"] <= 1
+
+
+def test_score_engine_strategy_exception_forces_hard_gate():
+    s = score_result(
+        {"return_pct": 0.2, "test_bars": 120, "strategy_exception_fallback": True},
+        {"max_drawdown": -0.1, "expectancy": 0.01, "profit_factor": 1.5, "calibration_proxy": 0.8, "turnover": 0.3},
+    )
+    assert s["hard_gate_pass"] is False
+    assert "strategy_exception_fallback" in s["hard_gate_failures"]

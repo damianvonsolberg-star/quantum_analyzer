@@ -18,6 +18,18 @@ def _normalize_spot_action(action_raw: str) -> str:
     return "WAIT"
 
 
+def _bundle_subject(bundle: dict) -> dict:
+    supporting = bundle.get("supporting_metrics", {}) if isinstance(bundle.get("supporting_metrics"), dict) else {}
+    winner = supporting.get("supporting_metrics", {}) if isinstance(supporting.get("supporting_metrics"), dict) else {}
+    selected_cluster = supporting.get("selected_cluster", {}) if isinstance(supporting.get("selected_cluster"), dict) else {}
+    source = bundle.get("source", {}) if isinstance(bundle.get("source"), dict) else {}
+    candidate_id = winner.get("candidate_id") or selected_cluster.get("candidate_id")
+    return {
+        "candidate_id": (str(candidate_id) if candidate_id else None),
+        "promotion_cluster": (str(source.get("promotion_cluster")) if source.get("promotion_cluster") else None),
+    }
+
+
 def _is_cycle_stale() -> tuple[bool, str]:
     p = Path("artifacts/research_cycle_status.json")
     if not p.exists():
@@ -73,6 +85,7 @@ def main() -> int:
         }
     else:
         b = json.loads(bundle_path.read_text(encoding="utf-8"))
+        bundle_subject = _bundle_subject(b)
         supporting = (b.get("supporting_metrics", {}) or {}) if isinstance(b.get("supporting_metrics"), dict) else {}
         source = (b.get("source", {}) or {}) if isinstance(b.get("source"), dict) else {}
         expect = supporting.get("expectancy", None)
@@ -112,6 +125,7 @@ def main() -> int:
                 "leaderboard": source.get("leaderboard"),
                 "promotion_cluster": source.get("promotion_cluster"),
             },
+            "subject_ids": bundle_subject,
             "warnings": ["advisory_only"],
         }
 
@@ -173,6 +187,40 @@ def main() -> int:
             "human_reason": rg.get("human_reason"),
         }
         out["release_state"] = rg.get("overall_state", out.get("release_state", "NO_EDGE"))
+        rg_subject = rg.get("evaluated_subject", {}) if isinstance(rg.get("evaluated_subject"), dict) else {}
+        bundle_subject = out.get("subject_ids", {}) if isinstance(out.get("subject_ids"), dict) else {}
+        b_cid = bundle_subject.get("candidate_id")
+        b_cluster = bundle_subject.get("promotion_cluster")
+        r_cid = rg_subject.get("candidate_id")
+        r_cluster = rg_subject.get("promotion_cluster")
+        subject_mismatch = False
+        subject_missing = False
+        if b_cid or b_cluster:
+            if not (r_cid or r_cluster):
+                subject_missing = True
+            if b_cid and r_cid and str(b_cid) != str(r_cid):
+                subject_mismatch = True
+            if b_cluster and r_cluster and str(b_cluster) != str(r_cluster):
+                subject_mismatch = True
+        if subject_missing or subject_mismatch:
+            reason_code = "release_gate_subject_missing" if subject_missing else "release_gate_subject_mismatch"
+            out.update({
+                "status": "insufficient_evidence",
+                "reason": reason_code,
+                "release_state": "NO_EDGE",
+                "release_gate_failures": sorted(set(list(out.get("release_gate_failures", [])) + [reason_code])),
+            })
+            out["release_gate"]["passed"] = False
+            out["release_gate"]["overall_state"] = "NO_EDGE"
+            fails = out["release_gate"].get("failures", [])
+            if not isinstance(fails, list):
+                fails = []
+            if reason_code not in fails:
+                fails.append(reason_code)
+            out["release_gate"]["failures"] = fails
+            ws = out.setdefault("warnings", [])
+            if isinstance(ws, list):
+                ws.append(reason_code)
         if not bool(rg.get("passed", False)):
             out.update({
                 "status": "no_edge",

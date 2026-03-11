@@ -51,6 +51,8 @@ def score_result(summary: dict[str, Any], diagnostics: dict[str, Any]) -> dict[s
     hard_gate_failures: list[str] = []
     if mdd > 0.35:
         hard_gate_failures.append("max_drawdown_ceiling")
+    if bool(summary.get("strategy_exception_fallback", False)):
+        hard_gate_failures.append("strategy_exception_fallback")
     if exp <= 0.0:
         hard_gate_failures.append("non_positive_expectancy_after_cost")
     if sample_support_available and sample_support < 20:

@@ -74,7 +74,13 @@ def run_research_cycle(config: str = "config/research/solusdc_research.json", di
     root = Path("artifacts")
     ok, msg = acquire_lock(root)
     if not ok:
-        return True, {"ok": True, "state": "running", "step": "lock", "error": msg, "message": "research_cycle_already_running"}
+        return False, {
+            "ok": False,
+            "state": "degraded",
+            "step": "lock",
+            "error": msg,
+            "message": "research_cycle_lock_contention",
+        }
 
     status_path = Path("artifacts/research_cycle_status.json")
     run_id = uuid.uuid4().hex[:12]

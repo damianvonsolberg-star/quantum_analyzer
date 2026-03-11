@@ -54,7 +54,9 @@ def make_search_space(preset: str = "fast") -> list[ExperimentSpec]:
     regimes = ["all", "low_vol", "mid_vol", "high_vol"]
     candidate_grid = expand_candidate_grid(
         {
-            "families": ["trend", "mean_reversion", "breakout", "regime_switch", "ensemble", "ml_baseline"],
+            # Breakout disabled in production presets until compression/range features
+            # are explicitly wired into active feature subsets.
+            "families": ["trend", "mean_reversion", "regime_switch", "ensemble", "ml_baseline"],
             "thresholds": [0.15, 0.25],
             "feature_subsets": subsets,
             "regime_filters": regimes,

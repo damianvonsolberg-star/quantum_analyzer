@@ -27,7 +27,20 @@ def test_run_research_cycle_success(monkeypatch):
     def _run(cmd, capture_output=True, text=True, timeout=None, env=None):
         return _R(0)
 
+    monkeypatch.setattr(ro, "acquire_lock", lambda root: (True, "ok"))
+    monkeypatch.setattr(ro, "release_lock", lambda root: None)
     monkeypatch.setattr(ro.subprocess, "run", _run)
     ok, status = run_research_cycle()
     assert ok is True
     assert status.get("ok") is True
+
+
+def test_run_research_cycle_lock_contention_is_degraded(monkeypatch):
+    import ui.research_ops as ro
+
+    monkeypatch.setattr(ro, "acquire_lock", lambda root: (False, "run_in_progress"))
+    ok, status = run_research_cycle()
+    assert ok is False
+    assert status.get("ok") is False
+    assert status.get("state") == "degraded"
+    assert status.get("step") == "lock"

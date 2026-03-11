@@ -74,7 +74,11 @@ def apply_promoted_advisory_overlay(
         same_hour = ts.dt.floor("h") == adv_hour
         if bool(same_hour.any()):
             idx = ts[same_hour].index[-1]
+            prev_action = _normalize_action(out.loc[idx, "action"]) if "action" in out.columns else "HOLD"
             out.loc[idx, "action"] = adv["action"]
+            # Preserve hourly timeline for unchanged action; show exact flip time when action changed.
+            if prev_action != adv["action"]:
+                out.loc[idx, ts_col] = adv["timestamp"].isoformat()
             if adv["target_position"] is not None or "target_position" in out.columns:
                 out.loc[idx, "target_position"] = adv["target_position"]
             if adv["expected_edge_bps"] is not None or "expected_edge_bps" in out.columns:
@@ -108,3 +112,32 @@ def apply_promoted_advisory_overlay(
         out = out.assign(_ts_sort=ts2).sort_values("_ts_sort").drop(columns=["_ts_sort"]).reset_index(drop=True)
 
     return out, True, "appended_latest"
+
+
+def normalize_synthetic_ts(
+    df: pd.DataFrame,
+    *,
+    ts_col: str = "ts",
+    artifact_ts: str | None = None,
+) -> pd.DataFrame:
+    if df is None or df.empty or ts_col not in df.columns:
+        return df
+    out = df.copy()
+    s = out[ts_col]
+    if not pd.api.types.is_numeric_dtype(s):
+        return out
+
+    s_num = pd.to_numeric(s, errors="coerce")
+    if not s_num.notna().any():
+        return out
+    # Small integers are usually bar indices, not epochs.
+    if float(s_num.max()) >= 10_000_000_000:
+        return out
+
+    end_ts = pd.to_datetime(artifact_ts, utc=True, errors="coerce")
+    if end_ts is pd.NaT or end_ts is None or pd.isna(end_ts):
+        end_ts = pd.Timestamp.utcnow().tz_localize("UTC")
+    end_ts = end_ts.floor("h")
+
+    out[ts_col] = pd.date_range(end=end_ts, periods=len(out), freq="h", tz="UTC")
+    return out

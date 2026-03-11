@@ -247,6 +247,8 @@ def run_backtest(
 
     all_test_indices: list[int] = []
     candidate_history: list[dict[str, Any]] = []
+    strategy_exception_fallback = False
+    strategy_exception_details: list[str] = []
 
     for train_idx, test_idx in splits:
         X_train = features.iloc[train_idx]
@@ -265,11 +267,27 @@ def run_backtest(
             test_feats = features.iloc[test_idx]
             try:
                 score_series = candidate_strategy.generate_scores(test_feats)
-            except Exception:
+            except Exception as e:
+                if bt_cfg.strict_candidate_errors:
+                    raise RuntimeError(
+                        f"candidate_generate_scores_failed:{candidate_id}:{candidate_family}:{type(e).__name__}:{e}"
+                    ) from e
+                strategy_exception_fallback = True
+                strategy_exception_details.append(
+                    f"generate_scores:{candidate_id}:{type(e).__name__}:{e}"
+                )
                 score_series = pd.Series(0.0, index=test_feats.index)
             try:
                 action_series = candidate_strategy.propose_actions(test_feats)
-            except Exception:
+            except Exception as e:
+                if bt_cfg.strict_candidate_errors:
+                    raise RuntimeError(
+                        f"candidate_propose_actions_failed:{candidate_id}:{candidate_family}:{type(e).__name__}:{e}"
+                    ) from e
+                strategy_exception_fallback = True
+                strategy_exception_details.append(
+                    f"propose_actions:{candidate_id}:{type(e).__name__}:{e}"
+                )
                 action_series = pd.Series("HOLD", index=test_feats.index)
 
         for i_local, b in enumerate(beliefs):
@@ -432,6 +450,9 @@ def run_backtest(
         "bars": len(features),
         "split_count": len(splits),
         "test_bars": len(all_test_indices),
+        "strategy_exception_fallback": bool(strategy_exception_fallback),
+        "strategy_exception_count": int(len(strategy_exception_details)),
+        "strategy_exception_details": strategy_exception_details,
         "hold_ratio": hold_ratio,
         "hold_lock_detected": bool(hold_ratio > 0.95),
         "hold_lock_reasons": hold_lock_reasons,

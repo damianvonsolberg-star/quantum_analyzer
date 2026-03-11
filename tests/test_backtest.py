@@ -14,6 +14,7 @@ from quantum_analyzer.experiments.specs import ExperimentSpec
 from quantum_analyzer.contracts import ARTIFACT_SCHEMA_V2
 from quantum_analyzer.backtest.walkforward import WalkForwardConfig, purged_walkforward_splits
 from quantum_analyzer.paths.archetypes import PathTemplate
+from quantum_analyzer.strategies.base import CandidateStrategy
 
 
 def _synthetic_series(n: int = 24 * 120) -> tuple[pd.DataFrame, pd.Series]:
@@ -162,3 +163,36 @@ def test_experiment_runner_enforces_subset_and_regime_slice(tmp_path: Path, monk
     assert len(rows2) == 0
     assert len(failures2) == 1
     assert "Unknown regime slice" in failures2[0]["error"]
+
+
+def test_run_backtest_strict_candidate_errors_raise() -> None:
+    features, close = _synthetic_series(n=24 * 20)
+    wf = WalkForwardConfig(train_bars=24 * 10, test_bars=24 * 3, purge_bars=2, embargo_bars=2)
+    bt = BacktestConfig(strict_candidate_errors=True)
+
+    class _Explode(CandidateStrategy):
+        def generate_scores(self, features: pd.DataFrame) -> pd.Series:  # type: ignore[override]
+            raise RuntimeError("boom_generate")
+
+    cand = _Explode(candidate_id="explode", family="trend")
+
+    try:
+        run_backtest(features, close, _templates(), wf, bt, candidate_strategy=cand)
+        raise AssertionError("expected strict candidate exception")
+    except RuntimeError as e:
+        assert "candidate_generate_scores_failed" in str(e)
+
+
+def test_run_backtest_non_strict_candidate_errors_record_fallback() -> None:
+    features, close = _synthetic_series(n=24 * 20)
+    wf = WalkForwardConfig(train_bars=24 * 10, test_bars=24 * 3, purge_bars=2, embargo_bars=2)
+    bt = BacktestConfig(strict_candidate_errors=False)
+
+    class _Explode(CandidateStrategy):
+        def generate_scores(self, features: pd.DataFrame) -> pd.Series:  # type: ignore[override]
+            raise RuntimeError("boom_generate")
+
+    cand = _Explode(candidate_id="explode", family="trend")
+    result = run_backtest(features, close, _templates(), wf, bt, candidate_strategy=cand)
+    assert result.summary.get("strategy_exception_fallback") is True
+    assert int(result.summary.get("strategy_exception_count", 0)) >= 1

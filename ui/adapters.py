@@ -38,12 +38,15 @@ class ArtifactAdapter:
         return Path.cwd()
 
     def _final_advisory_json(self) -> dict[str, Any] | None:
-        # Only prefer canonical advisory for live operator artifact roots,
-        # not arbitrary temp fixture dirs used in tests.
-        base_s = str(self.base.resolve())
-        if "/artifacts/explorer/experiments/" not in base_s:
+        # Use canonical project-level advisory for any artifact directory
+        # under this project root. Avoid picking it for external fixture dirs.
+        base_p = self.base.resolve()
+        root = self._project_root().resolve()
+        try:
+            base_p.relative_to(root)
+        except Exception:
             return None
-        p = self._project_root() / "artifacts" / "promoted" / "advisory_latest.json"
+        p = root / "artifacts" / "promoted" / "advisory_latest.json"
         if not p.exists():
             return None
         raw = self._read_json(p)
