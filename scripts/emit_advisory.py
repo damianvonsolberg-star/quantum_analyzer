@@ -27,6 +27,10 @@ def _bundle_subject(bundle: dict) -> dict:
     return {
         "candidate_id": (str(candidate_id) if candidate_id else None),
         "promotion_cluster": (str(source.get("promotion_cluster")) if source.get("promotion_cluster") else None),
+        "candidate_family": (str(winner.get("candidate_family")) if winner.get("candidate_family") else None),
+        "feature_subset": (str(winner.get("feature_subset")) if winner.get("feature_subset") else None),
+        "regime_slice": (str(winner.get("regime_slice")) if winner.get("regime_slice") else None),
+        "horizon": (int(winner.get("horizon")) if isinstance(winner.get("horizon"), (int, float)) else None),
     }
 
 
@@ -193,12 +197,19 @@ def main() -> int:
         b_cluster = bundle_subject.get("promotion_cluster")
         r_cid = rg_subject.get("candidate_id")
         r_cluster = rg_subject.get("promotion_cluster")
+        structured_keys = ["candidate_family", "feature_subset", "regime_slice", "horizon"]
+        structured_available = all(bundle_subject.get(k) is not None and rg_subject.get(k) is not None for k in structured_keys)
+        structured_match = (
+            all(str(bundle_subject.get(k)) == str(rg_subject.get(k)) for k in structured_keys)
+            if structured_available
+            else None
+        )
         subject_mismatch = False
         subject_missing = False
         if b_cid or b_cluster:
             if not (r_cid or r_cluster):
                 subject_missing = True
-            if b_cid and r_cid and str(b_cid) != str(r_cid):
+            if b_cid and r_cid and str(b_cid) != str(r_cid) and structured_match is not True:
                 subject_mismatch = True
             if b_cluster and r_cluster and str(b_cluster) != str(r_cluster):
                 subject_mismatch = True

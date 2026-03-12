@@ -70,6 +70,25 @@ def _resolve_artifact_dir_path(raw_path: str) -> Path:
     return p
 
 
+def _promoted_candidate_id() -> str | None:
+    p = ROOT / "artifacts" / "promoted" / "current_signal_bundle.json"
+    if not p.exists():
+        return None
+    try:
+        import json
+
+        j = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(j, dict):
+            return None
+        sm = j.get("supporting_metrics", {}) if isinstance(j.get("supporting_metrics"), dict) else {}
+        winner = sm.get("supporting_metrics", {}) if isinstance(sm.get("supporting_metrics"), dict) else {}
+        sel = sm.get("selected_cluster", {}) if isinstance(sm.get("selected_cluster"), dict) else {}
+        cid = winner.get("candidate_id") or sel.get("candidate_id")
+        return str(cid) if cid else None
+    except Exception:
+        return None
+
+
 def _latest_from_leaderboard() -> str | None:
     lb_path = ROOT / "artifacts" / "explorer" / "leaderboard.parquet"
     if not lb_path.exists():
@@ -78,10 +97,25 @@ def _latest_from_leaderboard() -> str | None:
         lb = pd.read_parquet(lb_path)
         if lb.empty:
             return None
-        if "leaderboard_rank" in lb.columns:
-            lb = lb.sort_values("leaderboard_rank", ascending=True)
         if "artifact_dir" not in lb.columns:
             return None
+
+        # Prefer the most recent run for the currently promoted winner candidate.
+        promoted_cid = _promoted_candidate_id()
+        if promoted_cid and "candidate_id" in lb.columns:
+            m = lb[lb["candidate_id"].astype(str) == str(promoted_cid)].copy()
+            if not m.empty:
+                if "completed_at" in m.columns:
+                    m = m.sort_values("completed_at", ascending=False)
+                elif "leaderboard_rank" in m.columns:
+                    m = m.sort_values("leaderboard_rank", ascending=True)
+                for raw in m["artifact_dir"].dropna().astype(str).tolist():
+                    p = _resolve_artifact_dir_path(raw)
+                    if p.exists() and (p / "artifact_bundle.json").exists():
+                        return str(p)
+
+        if "leaderboard_rank" in lb.columns:
+            lb = lb.sort_values("leaderboard_rank", ascending=True)
         for raw in lb["artifact_dir"].dropna().astype(str).tolist():
             p = _resolve_artifact_dir_path(raw)
             if p.exists() and (p / "artifact_bundle.json").exists():

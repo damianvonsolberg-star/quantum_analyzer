@@ -23,6 +23,64 @@ def _assign_candidate_status(row: pd.Series, min_score: float) -> str:
     return "approved"
 
 
+def _normalize_spot_action(action_raw: str | None) -> str:
+    x = str(action_raw or "").strip().upper()
+    if x in {"BUY", "LONG", "BUY SPOT"}:
+        return "BUY SPOT"
+    if x in {"REDUCE", "SELL", "SHORT", "REDUCE SPOT"}:
+        return "REDUCE SPOT"
+    if x in {"GO FLAT", "FLAT"}:
+        return "GO FLAT"
+    if x in {"HOLD", "WAIT"}:
+        return "HOLD"
+    return "HOLD"
+
+
+def _read_candidate_proposal(artifact_dir: str | Path | None) -> dict[str, Any]:
+    if not artifact_dir:
+        return {}
+    p = Path(str(artifact_dir)) / "artifact_bundle.json"
+    if not p.exists():
+        return {}
+    try:
+        j = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    proposal = j.get("proposal", {}) if isinstance(j.get("proposal"), dict) else {}
+    return proposal if isinstance(proposal, dict) else {}
+
+
+def _resolve_target_and_action(row: pd.Series) -> tuple[float, str]:
+    # Prefer explicit leaderboard fields when present.
+    target = None
+    if "target_position" in row and pd.notna(row.get("target_position")):
+        try:
+            target = float(row.get("target_position"))
+        except Exception:
+            target = None
+    action = _normalize_spot_action(str(row.get("action"))) if "action" in row and pd.notna(row.get("action")) else "HOLD"
+
+    # Fallback to artifact bundle proposal for measured latest action/target.
+    if target is None or action == "HOLD":
+        prop = _read_candidate_proposal(row.get("artifact_dir"))
+        if target is None and isinstance(prop.get("target_position"), (int, float)):
+            target = float(prop.get("target_position"))
+        if prop.get("action") is not None:
+            action = _normalize_spot_action(str(prop.get("action")))
+
+    # Final safety: map unresolved target from action semantics.
+    if target is None:
+        if action == "BUY SPOT":
+            target = 1.0
+        elif action in {"REDUCE SPOT", "GO FLAT", "HOLD"}:
+            target = 0.0
+        else:
+            target = 0.0
+
+    target = float(max(0.0, target))
+    return target, action
+
+
 def promote_from_leaderboard(
     explorer_root: str | Path,
     out_root: str | Path,
@@ -67,6 +125,10 @@ def promote_from_leaderboard(
     lb = lb.copy()
     lb["promotion_status"] = lb.apply(lambda r: _assign_candidate_status(r, min_score), axis=1)
     approved = lb[lb["promotion_status"] == "approved"].copy()
+    if not approved.empty:
+        resolved = approved.apply(_resolve_target_and_action, axis=1).tolist()
+        approved["target_position"] = [float(t) for t, _ in resolved]
+        approved["resolved_action"] = [str(a) for _, a in resolved]
 
     if governance_status.upper() != "OK":
         out = {
@@ -130,6 +192,7 @@ def promote_from_leaderboard(
         if not isinstance(keys, tuple):
             keys = (keys,)
         d = {k: v for k, v in zip(grp_cols, keys)}
+        g_sorted = g.sort_values(score_col, ascending=False)
         weights = g[score_col].astype(float).fillna(0.0)
         robust_score = float((g[score_col].astype(float).fillna(0.0)).mean())
         support = int(len(g))
@@ -144,8 +207,29 @@ def promote_from_leaderboard(
             # Do not synthesize target from sign(return); require measured target evidence.
             tp = 0.0
 
+        if "resolved_action" in g.columns:
+            # weighted vote across concrete measured actions for this cluster
+            aw = (
+                g[["resolved_action"]]
+                .assign(_w=weights.values)
+                .groupby("resolved_action", as_index=False)["_w"]
+                .sum()
+                .sort_values("_w", ascending=False)
+            )
+            action_family = str(aw.iloc[0]["resolved_action"]) if not aw.empty else ("BUY SPOT" if float(tp) > 0 else "REDUCE SPOT")
+        else:
+            action_family = "BUY SPOT" if float(tp) > 0 else "REDUCE SPOT"
+
+        cluster_candidate_id = None
+        if "candidate_id" in g_sorted.columns and not g_sorted.empty and pd.notna(g_sorted.iloc[0].get("candidate_id")):
+            cluster_candidate_id = str(g_sorted.iloc[0].get("candidate_id"))
+        if not cluster_candidate_id:
+            cluster_candidate_id = f"{d.get('candidate_family','unknown')}:{d.get('feature_subset','all')}:{d.get('horizon','na')}:{d.get('regime_slice','all')}"
+
         d.update(
             {
+                "candidate_id": cluster_candidate_id,
+                "action": action_family,
                 "robust_score": robust_score,
                 "cluster_score": cluster_score,
                 "support": support,
@@ -166,14 +250,13 @@ def promote_from_leaderboard(
     approved_rows: list[dict[str, Any]] = []
     rejected_rows: list[dict[str, Any]] = []
     for _, r in ranked.iterrows():
-        action_family = "BUY SPOT" if float(r.get("target_position", 0.0) or 0.0) > 0 else "REDUCE SPOT"
         row = {
-            "candidate_id": f"{r.get('candidate_family','unknown')}:{r.get('feature_subset','all')}:{r.get('regime_slice','all')}:{r.get('horizon','na')}",
+            "candidate_id": str(r.get("candidate_id", "")) or f"{r.get('candidate_family','unknown')}:{r.get('feature_subset','all')}:{r.get('horizon','na')}:{r.get('regime_slice','all')}",
             "candidate_family": str(r.get("candidate_family", "unknown")),
             "feature_subset": str(r.get("feature_subset", "all")),
             "regime_slice": str(r.get("regime_slice", "all")),
             "horizon": r.get("horizon", None),
-            "action": action_family,
+            "action": str(r.get("action", "HOLD")),
             "target_position": float(r.get("target_position", 0.0) or 0.0),
             "vote_weight": float(r.get("cluster_score", 0.0) or 0.0),
             "robust_score": float(r.get("robust_score", 0.0) or 0.0),

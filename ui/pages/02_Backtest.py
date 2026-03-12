@@ -230,6 +230,20 @@ if overlay_applied:
         st.info("Decision engine overlay: latest same-hour action is aligned to promoted advisory.")
     elif overlay_mode == "appended_latest":
         st.info("Decision engine overlay: appended promoted advisory action to latest timeline.")
+else:
+    if isinstance(adv_json, dict):
+        adv_ts_raw = adv_json.get("timestamp") or adv_json.get("updated_at")
+        adv_dt = pd.to_datetime(adv_ts_raw, utc=True, errors="coerce")
+        ts_col_actions = "ts" if "ts" in actions.columns else ("timestamp" if "timestamp" in actions.columns else None)
+        if ts_col_actions:
+            ac_dt = pd.to_datetime(actions[ts_col_actions], utc=True, errors="coerce").dropna()
+            if (adv_dt is not pd.NaT) and (adv_dt is not None) and (not ac_dt.empty):
+                lag_h = float((adv_dt - ac_dt.max()).total_seconds() / 3600.0)
+                if lag_h > 2.0:
+                    st.warning(
+                        f"Backtest timeline is {lag_h:.1f}h older than current advisory timestamp. "
+                        "This run may be stale relative to Live Advice."
+                    )
 
 # filters
 f1, f2, f3, f4 = st.columns(4)
